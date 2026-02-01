@@ -16,7 +16,7 @@ export const useAuth = () => {
 // ✅ Create ONE axios instance
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: true,
+  
 });
 
 export const AuthProvider = ({ children }) => {
