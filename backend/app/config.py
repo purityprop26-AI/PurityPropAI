@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     
     # Database Configuration
-    database_url: str = "mongodb://localhost:27017/"
+    database_url: str = "mongodb+srv://naveenkumart949_db_user:VmMnHAV49sjgyu68@cluster0.dch6vry.mongodb.net/?appName=Cluster0"
     database_name: str = "real_estate_ai"
     
     # Application Settings
