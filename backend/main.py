@@ -10,38 +10,39 @@ from app.auth_routes import router as auth_router
 
 app = FastAPI(
     title="Tamil Nadu Real Estate AI Assistant",
-    version="1.0.0"
+    version="1.0.0",
 )
 
-# ✅ CORS MUST BE HERE (Backend responsibility)
+# ✅ CORS CONFIG (FIXED)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",                     # local dev
-        "https://purity-prop-f-git-main-naveens-projects-36f95ce0.vercel.app"    # frontend on vercel
-        "https://purity-prop-f.vercel.app"
+        "http://localhost:5173",
+        "https://purity-prop-f.vercel.app",
+        "https://purity-prop-f-git-main-naveens-projects-36f95ce0.vercel.app",
     ],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Explicit OPTIONS handler (FIXES preflight failure)
+# ✅ Explicit OPTIONS handler (important for Vercel)
 @app.options("/{path:path}")
 async def options_handler(path: str):
     return {}
 
-
 # ✅ Routers
-app.include_router(auth_router, prefix="/api/auth")
+# auth_routes.py already defines /auth/*
+app.include_router(auth_router, prefix="/api")
 
-app.include_router(router)
+# other routes
+app.include_router(router, prefix="/api")
 
-# ✅ Health / Root endpoint
+# ✅ Health check
 @app.get("/")
 def root():
     return {
         "message": "Tamil Nadu Real Estate AI Assistant API",
         "status": "active",
-        "docs": "/docs"
+        "docs": "/docs",
     }
