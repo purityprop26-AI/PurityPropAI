@@ -19,14 +19,22 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",                     # local dev
         "https://purity-prop-f-git-main-naveens-projects-36f95ce0.vercel.app"    # frontend on vercel
+        "https://purity-prop-f.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ✅ Explicit OPTIONS handler (FIXES preflight failure)
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return {}
+
+
 # ✅ Routers
-app.include_router(auth_router)
+app.include_router(auth_router, prefix="/api/auth")
+
 app.include_router(router)
 
 # ✅ Health / Root endpoint
