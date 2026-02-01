@@ -21,7 +21,7 @@ app.add_middleware(
         "https://purity-prop-f-git-main-naveens-projects-36f95ce0.vercel.app"    # frontend on vercel
         "https://purity-prop-f.vercel.app"
     ],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
