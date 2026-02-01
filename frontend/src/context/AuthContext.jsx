@@ -47,8 +47,9 @@ export const AuthProvider = ({ children }) => {
             if (!refreshToken) throw new Error("No refresh token");
 
             const res = await api.post("/api/auth/refresh", {
-              refresh_token: refreshToken,
-            });
+  refresh_token: refreshToken
+});
+
 
             const { access_token } = res.data;
             localStorage.setItem("token", access_token);
