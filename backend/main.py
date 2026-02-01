@@ -1,64 +1,39 @@
 """
 Tamil Nadu Real Estate AI Assistant - FastAPI Backend
-Main application entry point
+Main application entry point (Vercel-compatible)
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.database import init_db
 from app.routes import router
 from app.auth_routes import router as auth_router
 
-
-# Initialize FastAPI app
 app = FastAPI(
-    title=settings.app_name,
-    description="Domain-restricted AI assistant for Tamil Nadu real estate queries",
-    version="1.0.0",
-    debug=settings.debug
+    title="Tamil Nadu Real Estate AI Assistant",
+    version="1.0.0"
 )
 
-# Configure CORS
+# ✅ CORS MUST BE HERE (Backend responsibility)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=[
+        "http://localhost:5173",                     # local dev
+        "https://purity-prop-frontend.vercel.app"    # frontend on vercel
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+# ✅ Routers
 app.include_router(auth_router)
 app.include_router(router)
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup."""
-    init_db()
-    print(f"🚀 {settings.app_name} started successfully!")
-    print(f"📊 Database: {settings.database_url}")
-    print(f"🤖 LLM Model: {settings.llm_model}")
-    print(f"🌐 CORS Origins: {settings.cors_origins}")  # Debug CORS
-
-
+# ✅ Health / Root endpoint
 @app.get("/")
 def root():
-    """Root endpoint."""
     return {
         "message": "Tamil Nadu Real Estate AI Assistant API",
-        "version": "1.0.0",
         "status": "active",
         "docs": "/docs"
     }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.debug
-    )
