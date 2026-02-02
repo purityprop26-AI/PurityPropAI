@@ -36,7 +36,24 @@ app.include_router(router, prefix="/api")
 @app.get("/")
 def root():
     return {
-        "message": "Tamil Nadu Real Estate AI Assistant API (Safe Mode)",
+        "message": "Tamil Nadu Real Estate AI Assistant API",
         "status": "active",
         "docs": "/docs",
     }
+
+# ✅ Debug Endpoint (Temporary)
+@app.get("/api/db-check")
+async def db_check():
+    try:
+        from app.database import get_engine
+        engine = get_engine()
+        # Try a simple command
+        await engine.client.admin.command('ping')
+        return {"status": "ok", "message": "Connected to MongoDB Atlas!"}
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error", 
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
