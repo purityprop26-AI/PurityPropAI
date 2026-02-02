@@ -13,14 +13,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
+from app.config import settings
+
 # ✅ CORS CONFIG (FIXED)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://purity-prop-f.vercel.app",
-        "https://purity-prop-f-git-main-naveens-projects-36f95ce0.vercel.app",
-    ],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
