@@ -1,64 +1,48 @@
 """
 Tamil Nadu Real Estate AI Assistant - FastAPI Backend
-Main application entry point
+Main application entry point (Vercel-compatible)
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.database import init_db
 from app.routes import router
 from app.auth_routes import router as auth_router
 
-
-# Initialize FastAPI app
 app = FastAPI(
-    title=settings.app_name,
-    description="Domain-restricted AI assistant for Tamil Nadu real estate queries",
+    title="Tamil Nadu Real Estate AI Assistant",
     version="1.0.0",
-    debug=settings.debug
 )
 
-# Configure CORS
+# ✅ CORS CONFIG (FIXED)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://purity-prop-f.vercel.app",
+        "https://purity-prop-f-git-main-naveens-projects-36f95ce0.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(auth_router)
-app.include_router(router)
+# ✅ Explicit OPTIONS handler (important for Vercel)
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return {}
 
+# ✅ Routers
+# auth_routes.py already defines /auth/*
+app.include_router(auth_router, prefix="/api")
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup."""
-    init_db()
-    print(f"🚀 {settings.app_name} started successfully!")
-    print(f"📊 Database: {settings.database_url}")
-    print(f"🤖 LLM Model: {settings.llm_model}")
-    print(f"🌐 CORS Origins: {settings.cors_origins}")  # Debug CORS
+# other routes
+app.include_router(router, prefix="/api")
 
-
+# ✅ Health check
 @app.get("/")
 def root():
-    """Root endpoint."""
     return {
         "message": "Tamil Nadu Real Estate AI Assistant API",
-        "version": "1.0.0",
         "status": "active",
-        "docs": "/docs"
+        "docs": "/docs",
     }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.debug
-    )
