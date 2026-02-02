@@ -9,8 +9,9 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     
     # Database Configuration
-    database_url: str = "mongodb+srv://naveenkumart949_db_user:VmMnHAV49sjgyu68@cluster0.dch6vry.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-    database_name: str = "real_estate_ai"
+    # Database Configuration
+    database_url: str = "mongodb+srv://naveenkumart949_db_user:Naveenkumar@cluster0.dch6vry.mongodb.net/purityprop?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=true"
+    database_name: str = "purityprop"
     
     # Application Settings
     app_name: str = "Tamil Nadu Real Estate AI Assistant"

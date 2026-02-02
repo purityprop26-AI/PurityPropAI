@@ -1,12 +1,13 @@
+```python
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 
-ATLAS_URL = "mongodb+srv://naveenkumart949_db_user:VmMnHAV49sjgyu68@cluster0.dch6vry.mongodb.net/?appName=Cluster0"
+ATLAS_URL = "mongodb+srv://naveenkumart949_db_user:Naveenkumar@cluster0.dch6vry.mongodb.net/purityprop?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=true"
 
 async def check_users():
     try:
         client = AsyncIOMotorClient(ATLAS_URL)
-        db = client["real_estate_ai"]
+        db = client["purityprop"]
         
         # Count users
         user_count = await db.user.count_documents({})
