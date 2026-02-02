@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Use environment variable for API URL, fallback to proxy in development
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = (import.meta.env.VITE_API_URL || '').trim();
 
 // Create axios instance with base configuration
 const apiClient = axios.create({

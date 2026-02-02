@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import ChatMessage from '../components/ChatMessage';
 import ChatInput from '../components/ChatInput';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = (import.meta.env.VITE_API_URL || '').trim();
 
 function Chat() {
     const [messages, setMessages] = useState([]);

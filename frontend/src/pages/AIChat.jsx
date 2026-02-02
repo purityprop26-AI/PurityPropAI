@@ -6,7 +6,7 @@ import { useChat } from '../context/ChatContext';
 import PremiumInput from '../components/PremiumInput';
 import { Bot, User, Copy, Check } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = (import.meta.env.VITE_API_URL || '').trim();
 
 const AIChat = () => {
     const { messages, currentChatId, addMessage, createNewChat } = useChat();
