@@ -14,7 +14,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://puritypropai.onrender.com",
-        "https://purityprop.onrender.com"
+        "https://purityprop.onrender.com",
+        "https://purity-prop-f.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],

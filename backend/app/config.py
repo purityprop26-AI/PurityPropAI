@@ -22,10 +22,9 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        "https://purity-prop-b.vercel.app",
         "https://*.vercel.app",
-        "https://puritypropai.onrender.com",  # Render Frontend
-        "https://purityprop.onrender.com",    # Render Frontend (alternative)
+        "https://purityprop.onrender.com",    # Render Backend
+        "https://purity-prop-f.vercel.app",   # Vercel Frontend
     ]
     
     # LLM Settings

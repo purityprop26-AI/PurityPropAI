@@ -12,7 +12,7 @@ async def test_connection():
     
     try:
         client = AsyncIOMotorClient(
-            connection_string,
+            CONNECTION_STRING,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000
         )
