@@ -4,7 +4,7 @@ import axios from "axios";
 
 
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = (import.meta.env.VITE_API_URL || "").trim();
 
 const api = axios.create({
   baseURL: API_URL,
@@ -51,8 +51,8 @@ export const AuthProvider = ({ children }) => {
             if (!refreshToken) throw new Error("No refresh token");
 
             const res = await api.post("/api/auth/refresh", {
-  refresh_token: refreshToken
-});
+              refresh_token: refreshToken
+            });
 
 
             const { access_token } = res.data;
