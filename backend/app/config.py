@@ -16,8 +16,15 @@ class Settings(BaseSettings):
     app_name: str = "Tamil Nadu Real Estate AI Assistant"
     debug: bool = True
     
-    # CORS Settings - TEMPORARY: Allow all origins for testing
-    cors_origins: list = ["*"]  # TODO: Restrict to specific origins in production
+    # CORS Settings
+    cors_origins: list = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "https://purity-prop-b.vercel.app",  # Vercel backend
+        "https://*.vercel.app",  # Any Vercel deployment
+    ]
     
     # LLM Settings
     llm_model: str = "llama-3.1-8b-instant"
