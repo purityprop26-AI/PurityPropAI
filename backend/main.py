@@ -15,8 +15,8 @@ app.add_middleware(
     allow_origins=[
         "https://puritypropai.onrender.com",
         "https://purityprop.onrender.com",
-        "https://purity-prop-f.vercel.app"
     ],
+    allow_origin_regex="https://.*\\.vercel\\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
