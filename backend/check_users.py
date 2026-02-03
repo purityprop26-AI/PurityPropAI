@@ -1,11 +1,20 @@
 import asyncio
+import os
+import sys
 from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
 
-ATLAS_URL = "mongodb+srv://naveenkumart949_db_user:Naveenkumar@cluster0.dch6vry.mongodb.net/real_estate_ai?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=true"
+# Load env vars if present (local dev)
+load_dotenv()
 
 async def check_users():
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        print("❌ Error: DATABASE_URL environment variable is not set.")
+        return
+
     try:
-        client = AsyncIOMotorClient(ATLAS_URL)
+        client = AsyncIOMotorClient(database_url)
         db = client["real_estate_ai"]
         
         # Count users
@@ -23,7 +32,9 @@ async def check_users():
             print("\n⚠️ No users found in database yet.")
             
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error connecting to database: {e}")
 
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(check_users())

@@ -52,6 +52,9 @@ NON_REAL_ESTATE_INDICATORS = [
 ]
 
 
+# Maximum allowed query length to prevent Regex DoS
+MAX_QUERY_LENGTH = 1000
+
 def is_real_estate_query(query: str) -> Tuple[bool, str]:
     """
     Determine if a query is related to real estate.
@@ -62,6 +65,13 @@ def is_real_estate_query(query: str) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, reason)
     """
+    if not query:
+        return False, "Empty query"
+
+    # 1. Length Check (DoS Protection)
+    if len(query) > MAX_QUERY_LENGTH:
+        return False, "Query too long"
+        
     query_lower = query.lower().strip()
     
     # Check if query is too short

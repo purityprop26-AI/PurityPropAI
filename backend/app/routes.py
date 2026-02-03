@@ -51,12 +51,15 @@ async def chat(request: ChatRequest, engine: AIOEngine = Depends(get_engine)):
         raise HTTPException(status_code=404, detail="Session not found")
     
     # Validate domain (real estate only)
-    # Assuming is_real_estate_query is sync
-    is_valid, reason = is_real_estate_query(request.message)
+    # Validate domain (real estate only)
+    # Run CPU-bound validation in threadpool to enforce non-blocking behavior
+    from fastapi.concurrency import run_in_threadpool
+    
+    is_valid, reason = await run_in_threadpool(is_real_estate_query, request.message)
     
     if not is_valid:
         # Detect language for rejection message
-        language = detect_language(request.message)
+        language = await run_in_threadpool(detect_language, request.message)
         rejection_msg = get_rejection_message(language)
         
         # Save user message
@@ -168,4 +171,4 @@ def health_check():
         "status": "healthy",
         "service": "Tamil Nadu Real Estate AI Assistant",
         "timestamp": datetime.utcnow().isoformat()
-    }
+    } 
