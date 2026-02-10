@@ -29,8 +29,10 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        "https://purity-prop-f.vercel.app",  # Production Frontend
-        "https://puritypropai.onrender.com", # Self-reference
+        "https://purity-prop-f.vercel.app",  # Old Vercel URL
+        "https://purity-prop-ai.vercel.app", # Current Vercel URL
+        "https://puritypropai-9ri1.onrender.com", # Backend self-reference
+        "https://puritypropai.onrender.com", # Backend alternate
         "https://purityprop.com",            # Custom Domain
         "https://www.purityprop.com",        # Custom Domain (WWW)
     ]
