@@ -13,3 +13,5 @@ python-multipart==0.0.6
 dnspython
 certifi
 bcrypt==3.2.0
+gunicorn==21.2.0
+email-validator==2.1.0.post1
