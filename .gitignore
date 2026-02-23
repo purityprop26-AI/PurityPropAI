@@ -8,3 +8,4 @@ backend/__pycache__/
 dist/
 coverage/
 .vscode/
+AUTHENTICATION_PLAN.md
