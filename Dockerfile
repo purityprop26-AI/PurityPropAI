@@ -82,9 +82,11 @@ EXPOSE ${PORT}
 #
 # Worker count: 1 for free-tier Supabase (connection pool safety).
 # Increase to 2 only if Supabase plan supports >60 connections.
-CMD ["python", "-m", "uvicorn", "main:app", \
-    "--host", "0.0.0.0", "--port", "8000", \
+CMD ["python", "-m", "gunicorn", "main:app", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
     "--workers", "1", \
-    "--loop", "uvloop", \
-    "--http", "httptools", \
-    "--no-access-log"]
+    "--bind", "0.0.0.0:8000", \
+    "--timeout", "120", \
+    "--graceful-timeout", "30", \
+    "--keep-alive", "5", \
+    "--access-logfile", "-"]

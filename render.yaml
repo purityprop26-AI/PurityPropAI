@@ -1,0 +1,32 @@
+# ==============================================
+# Render.com Blueprint — Auto-deploy Configuration
+# ==============================================
+# Deploy: https://render.com/deploy?repo=https://github.com/purityprop26-AI/PurityPropAI
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: purityprop-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore  # Closest to India
+    branch: main
+    envVars:
+      - key: DATABASE_URL
+        sync: false  # Set manually in Render dashboard
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: PYTHONPATH
+        value: /app
+    healthCheckPath: /
+    autoDeploy: true
