@@ -27,13 +27,16 @@ _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12
 # ══════════════════════════════════════════════════════════════════════
 
 def hash_password(plain: str) -> str:
-    """bcrypt-hash a plaintext password."""
-    return _pwd_ctx.hash(plain)
+    """bcrypt-hash a plaintext password. Truncates to 72 bytes (bcrypt limit)."""
+    # bcrypt only uses the first 72 bytes — truncate to avoid PasswordTruncateError
+    safe_plain = plain.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return _pwd_ctx.hash(safe_plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Constant-time password comparison."""
-    return _pwd_ctx.verify(plain, hashed)
+    safe_plain = plain.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return _pwd_ctx.verify(safe_plain, hashed)
 
 
 # ══════════════════════════════════════════════════════════════════════
