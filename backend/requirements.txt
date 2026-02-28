@@ -1,42 +1,37 @@
 # --- Core Framework ---
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
-pydantic==2.6.1
-pydantic-settings==2.1.0
-python-multipart==0.0.9
+fastapi>=0.109.0,<1.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0,<3.0
+pydantic-settings>=2.1.0,<3.0
+python-multipart>=0.0.9
+gunicorn>=21.2.0
 
 # --- Database & Persistence ---
-sqlalchemy[asyncio]==2.0.27
-asyncpg==0.29.0
-psycopg2-binary==2.9.9
-python-dotenv==1.0.1
+sqlalchemy[asyncio]>=2.0.27
+asyncpg>=0.29.0
+python-dotenv>=1.0.1
 
 # --- AI & LLM Stack ---
-groq==0.4.2
-httpx==0.26.0
-tenacity==8.2.3
-langdetect==1.0.9
+groq>=0.4.0
+httpx>=0.26.0,<1.0
+tenacity>=8.2.0
+langdetect>=1.0.9
 
 # --- Security & Auth ---
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-cryptography==42.0.2
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+cryptography>=42.0.0
 
 # --- Observability & Logging ---
-structlog==24.1.0
-python-json-logger==2.0.7
-prometheus-fastapi-instrumentator==6.1.0
+structlog>=24.1.0
+python-json-logger>=2.0.0
+prometheus-fastapi-instrumentator>=6.1.0
 
 # --- Performance & Utilities ---
-orjson==3.9.15
-ujson==5.9.0
+orjson>=3.9.0
+ujson>=5.9.0
 certifi
 slowapi>=0.1.9
 
 # --- Production Server ---
-gunicorn==21.2.0
-
-# --- Testing & Validation ---
-pytest==8.0.0
-pytest-asyncio==0.23.5
-locust==2.21.0
+gunicorn>=21.2.0
