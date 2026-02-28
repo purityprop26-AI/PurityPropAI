@@ -14,6 +14,11 @@ frontend/.env
 frontend/.env.*
 frontend/.env.development
 frontend/.env.production
+!frontend/.env.development
+!frontend/.env.production
+
+# Allow frontend source lib (Supabase client)
+!frontend/src/lib/
 
 # --- Python ---
 __pycache__/
