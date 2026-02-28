@@ -28,12 +28,13 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        "https://purity-prop-f.vercel.app",  # Old Vercel URL
-        "https://purity-prop-ai.vercel.app", # Current Vercel URL
-        "https://puritypropai-9ri1.onrender.com", # Backend self-reference
-        "https://puritypropai.onrender.com", # Backend alternate
-        "https://purityprop.com",            # Custom Domain
-        "https://www.purityprop.com",        # Custom Domain (WWW)
+        "https://purity-prop-f.vercel.app",
+        "https://purity-prop-ai.vercel.app",
+        "https://purity-prop-ai-git-main-heyrams-projects-f7f1db1.vercel.app",
+        "https://puritypropai-9ri1.onrender.com",
+        "https://puritypropai.onrender.com",
+        "https://purityprop.com",
+        "https://www.purityprop.com",
     ]
     
     # LLM Settings
@@ -61,14 +62,15 @@ class Settings(BaseSettings):
     def get_cors_origins(self) -> List[str]:
         """
         Safe CORS origin retrieval.
-        Allows adding origins via parsing a separate env var if needed, 
-        or just relying on the list above.
+        Includes all Vercel preview URLs dynamically.
         """
+        origins = self.cors_origins.copy()
+        
         # If we have a comma-separated string in env, parse it
         env_origins = os.getenv("ADDITIONAL_CORS_ORIGINS")
-        origins = self.cors_origins.copy()
         if env_origins:
             origins.extend([origin.strip() for origin in env_origins.split(",") if origin.strip()])
+        
         return origins
 
 # Global settings instance

@@ -143,10 +143,22 @@ app = FastAPI(
 )
 
 
-# --- CORS --- (centralized, from settings)
+# --- CORS --- (centralized, from settings + dynamic Vercel preview support)
+_static_origins = settings.get_cors_origins()
+
+def _is_allowed_origin(origin: str) -> bool:
+    """Check if origin is allowed — includes any *.vercel.app preview URL."""
+    if origin in _static_origins:
+        return True
+    if origin.endswith(".vercel.app") and origin.startswith("https://"):
+        return True
+    return False
+
+# Build full allowed list including wildcard pattern
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
+    allow_origins=_static_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # Allow ALL Vercel preview URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
