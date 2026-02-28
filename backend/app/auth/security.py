@@ -10,40 +10,36 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 # ── Config ─────────────────────────────────────────────────────────────
 JWT_SECRET   = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
 JWT_ALGO     = "HS256"
 ACCESS_TTL   = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))   # minutes
 
-# passlib context — bcrypt with sensible rounds
-# bcrypt__truncate_error=False: Prevents PasswordTruncateError on bcrypt>=4.1
-# which changed default behavior to raise error instead of silently truncating at 72 bytes
-_pwd_ctx = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12,
-    bcrypt__truncate_error=False,
-)
-
 
 # ══════════════════════════════════════════════════════════════════════
-# PASSWORD
+# PASSWORD  (direct bcrypt — no passlib, avoids PasswordTruncateError)
 # ══════════════════════════════════════════════════════════════════════
 
 def hash_password(plain: str) -> str:
-    """bcrypt-hash a plaintext password. Truncates to 72 bytes (bcrypt limit)."""
-    # bcrypt only uses the first 72 bytes — truncate to avoid PasswordTruncateError
-    safe_plain = plain.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return _pwd_ctx.hash(safe_plain)
+    """bcrypt-hash a plaintext password."""
+    # bcrypt only uses the first 72 bytes — truncate safely
+    pwd_bytes = plain.encode("utf-8")[:72]
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(pwd_bytes, salt)
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Constant-time password comparison."""
-    safe_plain = plain.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return _pwd_ctx.verify(safe_plain, hashed)
+    pwd_bytes = plain.encode("utf-8")[:72]
+    hashed_bytes = hashed.encode("utf-8")
+    try:
+        return bcrypt.checkpw(pwd_bytes, hashed_bytes)
+    except Exception:
+        return False
 
 
 # ══════════════════════════════════════════════════════════════════════
