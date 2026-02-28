@@ -18,8 +18,15 @@ JWT_SECRET   = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
 JWT_ALGO     = "HS256"
 ACCESS_TTL   = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))   # minutes
 
-# passlib context — bcrypt with sensible rounds (12 is good balance of speed/security)
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+# passlib context — bcrypt with sensible rounds
+# bcrypt__truncate_error=False: Prevents PasswordTruncateError on bcrypt>=4.1
+# which changed default behavior to raise error instead of silently truncating at 72 bytes
+_pwd_ctx = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,
+    bcrypt__truncate_error=False,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════
