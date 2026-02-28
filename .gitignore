@@ -1,11 +1,99 @@
+# ============================================================
+# PurityProp AI — .gitignore
+# SECURITY: All secrets and sensitive files excluded
+# ============================================================
+
+# --- Environment / Secrets (NEVER commit these) ---
+.env
+.env.*
+!.env.example
+*.env
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+frontend/.env.development
+frontend/.env.production
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+*.pot
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Node / Frontend ---
 node_modules/
 frontend/node_modules/
-backend/venv/
-backend/__pycache__/
-*.pyc
-.env
-.DS_Store
 dist/
-coverage/
-.vscode/
-AUTHENTICATION_PLAN.md
+frontend/dist/
+.npm
+.eslintcache
+*.tsbuildinfo
+.vite/
+frontend/.vite/
+
+# --- Database / State ---
+state/
+*.sqlite
+*.db
+
+# --- IDE ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+.docker/
+
+# --- Certificates ---
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx

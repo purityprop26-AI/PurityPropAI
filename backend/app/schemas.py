@@ -1,8 +1,7 @@
-from pydantic import BaseModel, Field, BeforeValidator
+from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, List, Annotated
+from typing import Optional, List
 
-PyObjectId = Annotated[str, BeforeValidator(str)]
 
 
 class ChatRequest(BaseModel):
@@ -53,40 +52,16 @@ class ConversationHistory(BaseModel):
     messages: List[MessageHistory]
 
 
-# Authentication Schemas
-
-class UserCreate(BaseModel):
-    """Request model for user registration."""
-    email: str = Field(..., description="User email address")
-    password: str = Field(..., min_length=8, description="User password (min 8 characters)")
-    name: str = Field(..., min_length=2, description="User full name")
-
-
-class UserLogin(BaseModel):
-    """Request model for user login."""
-    email: str = Field(..., description="User email address")
-    password: str = Field(..., description="User password")
-
+# Authentication Schemas (Supabase Auth)
+# Only UserResponse remains — Supabase handles registration/login directly
 
 class UserResponse(BaseModel):
-    """Response model for user data."""
-    id: PyObjectId
+    """Response model for user data (from Supabase Auth)."""
+    id: str
     email: str
     name: str
-    created_at: datetime
-    
+    created_at: str
+
     class Config:
         from_attributes = True
 
-
-class Token(BaseModel):
-    """Response model for authentication token."""
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    user: UserResponse
-
-
-class RefreshTokenRequest(BaseModel):
-    """Request model for token refresh."""
-    refresh_token: str

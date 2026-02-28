@@ -282,6 +282,18 @@ body {
   gap: 1rem;
 }
 
+/* FIX [MED-F2]: Replaced Tailwind utility classes on App.jsx h1.
+   Was: font-['Cormorant_Garamond'] font-light text-2xl tracking-[0.10em] text-[#eeeef2]
+   Now: standard CSS class, no Tailwind dependency. */
+.app-brand {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-weight: 300;
+  font-size: 1.5rem;
+  letter-spacing: 0.10em;
+  color: #eeeef2;
+  margin: 0;
+}
+
 /* ===== Content Container ===== */
 .content-container {
   flex: 1;

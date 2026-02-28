@@ -40,10 +40,14 @@ const Sidebar = () => {
 
     const isActive = (path) => location.pathname === path;
 
-    // Filter chats based on search query
-    const filteredChats = chats.filter(chat =>
-        chat.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Filter chats: exclude empty "New Chat" entries and apply search, newest first
+    const filteredChats = chats
+        .filter(chat =>
+            chat.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+            (chat.title !== 'New Chat' || (chat.messages && chat.messages.length > 1))
+        )
+        .slice()
+        .reverse();
 
     const handleNewChat = () => {
         createNewChat();

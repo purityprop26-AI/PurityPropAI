@@ -1,0 +1,6 @@
+{
+    "query": "Find premium villas in Adyar under 10Cr",
+    "city": "Chennai",
+    "property_type": "villa",
+    "max_price": 100000000
+}

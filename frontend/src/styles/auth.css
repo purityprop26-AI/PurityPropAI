@@ -390,3 +390,287 @@
         font-size: 1.5rem;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   GOOGLE BUTTON
+══════════════════════════════════════════════════════════════════════ */
+.google-btn {
+    width: 100%;
+    background: #FFFFFF;
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    color: #1A1A1A;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    margin-bottom: 1.25rem;
+    font-family: inherit;
+}
+
+.google-btn:hover:not(:disabled) {
+    background: #F5F5F5;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.google-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DIVIDER
+══════════════════════════════════════════════════════════════════════ */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(156, 163, 175, 0.2);
+}
+
+.divider-text {
+    color: #64748B;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VERIFY EMAIL PAGE
+══════════════════════════════════════════════════════════════════════ */
+.verify-card {
+    max-width: 480px;
+}
+
+/* Shield icon ring */
+.verify-icon-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.verify-icon-ring {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.1);
+    border: 2px solid rgba(99, 102, 241, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse-ring 2s ease-in-out infinite;
+}
+
+.verify-icon {
+    color: #818CF8;
+}
+
+@keyframes pulse-ring {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.15);
+    }
+
+    50% {
+        box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+    }
+}
+
+.verify-email-highlight {
+    color: #9CA3AF;
+    font-weight: 600;
+}
+
+/* ── OTP Grid ──────────────────────────────────────────────────────── */
+.otp-grid {
+    display: flex;
+    gap: 0.625rem;
+    justify-content: center;
+    margin: 1.5rem 0;
+}
+
+.otp-input {
+    width: 52px;
+    height: 60px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    background: #0B132B;
+    border: 2px solid rgba(156, 163, 175, 0.2);
+    border-radius: 10px;
+    color: #FFFFFF;
+    transition: all 0.2s ease;
+    caret-color: #818CF8;
+    outline: none;
+}
+
+.otp-input:focus {
+    border-color: #818CF8;
+    background: #1A2332;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+    transform: translateY(-2px);
+}
+
+.otp-input.otp-filled {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: #1A2332;
+}
+
+.otp-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@media (max-width: 400px) {
+    .otp-input {
+        width: 42px;
+        height: 52px;
+        font-size: 1.25rem;
+    }
+
+    .otp-grid {
+        gap: 0.4rem;
+    }
+}
+
+/* ── Resend ────────────────────────────────────────────────────────── */
+.resend-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.resend-text {
+    color: #64748B;
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.resend-btn {
+    background: transparent;
+    border: none;
+    color: #9CA3AF;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.resend-btn:hover:not(:disabled) {
+    color: #D1D5DB;
+    background: rgba(156, 163, 175, 0.08);
+}
+
+.resend-btn:disabled {
+    color: #475569;
+    cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORGOT / RESET PASSWORD
+══════════════════════════════════════════════════════════════════════ */
+
+/* Row: Remember me on left, Forgot password on right */
+.form-row-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+}
+
+.forgot-link {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #FBBF24;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.forgot-link:hover {
+    color: #FCD34D;
+    text-decoration: underline;
+}
+
+/* Back arrow link */
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748B;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.back-link:hover {
+    color: #9CA3AF;
+}
+
+/* Success confirmation box (after email is sent) */
+.reset-success-box {
+    background: rgba(34, 197, 94, 0.06);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.reset-success-icon {
+    color: #22C55E;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reset-success-text {
+    color: #D1D5DB;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    text-align: center;
+    margin: 0;
+}
+
+/* Success alert banner (shared with VerifyEmail) */
+.success-message {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    color: #4ADE80;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}

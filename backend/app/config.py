@@ -14,9 +14,8 @@ class Settings(BaseSettings):
     # API Configuration
     groq_api_key: str  # REQUIRED: No default
     
-    # Database Configuration
+    # Database Configuration (PostgreSQL via Supabase)
     database_url: str  # REQUIRED: No default
-    database_name: str = "real_estate_ai"
     
     # Application Settings
     app_name: str = "Tamil Nadu Real Estate AI Assistant"
@@ -39,11 +38,15 @@ class Settings(BaseSettings):
     
     # LLM Settings
     llm_model: str = "llama-3.1-8b-instant"
-    llm_temperature: float = 0.7
+    llm_temperature: float = 0.3  # Low temp for deterministic valuation output
     llm_max_tokens: int = 1024
     
-    # JWT Authentication
-    jwt_secret_key: str  # REQUIRED: No default
+    # Supabase Auth
+    supabase_url: str  # REQUIRED: No default
+    supabase_anon_key: str  # REQUIRED: No default
+    
+    # JWT (kept for backward compatibility)
+    jwt_secret_key: str = ""  # Optional now — Supabase handles auth
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_minutes: int = 10080  # 7 days
