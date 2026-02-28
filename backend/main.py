@@ -49,9 +49,12 @@ async def lifespan(app: FastAPI):
     # --- STARTUP ---
     print("🚀 Starting PurityProp AI...")
 
-    # Initialize chat/auth database tables
-    await init_db()
-    print("✅ Chat/Auth DB initialized.")
+    # Initialize chat/auth database tables (non-fatal on failure)
+    try:
+        await init_db()
+        print("✅ Chat/Auth DB initialized.")
+    except Exception as e:
+        print(f"⚠️  DB init warning (app will start, DB lazy-connects): {e}")
 
     # Initialize Intelligence Engine
     if INTELLIGENCE_AVAILABLE:

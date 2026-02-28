@@ -10,6 +10,17 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
+import ssl as _ssl
+
+# Build SSL context that works with both direct and pooler Supabase connections
+try:
+    ssl_context = _ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = _ssl.CERT_NONE
+    _connect_args = {"ssl": ssl_context}
+except Exception:
+    _connect_args = {"ssl": "require"}
+
 # FIX [CRIT-B2]: Reduced from pool_size=5, max_overflow=10 (total 15)
 #                to pool_size=3, max_overflow=5 (total 8).
 #                Chat/auth stack handles lower concurrency than intelligence API.
@@ -20,13 +31,7 @@ engine = create_async_engine(
     max_overflow=5,
     pool_pre_ping=True,
     pool_recycle=1800,   # Recycle connections after 30 min (prevents stale SSL connections)
-    connect_args={
-        "ssl": "require",
-        "server_settings": {
-            "application_name": "PurityPropAI-Chat",
-            "statement_timeout": "30000",  # 30s max per statement
-        },
-    },
+    connect_args=_connect_args,
 )
 
 # Session factory
