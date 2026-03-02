@@ -108,8 +108,8 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 
 if REDIS_URL:
     try:
-        import redis
-        _redis_client = redis.from_url(
+        import redis as _redis_module
+        _redis_client = _redis_module.from_url(
             REDIS_URL,
             decode_responses=True,
             socket_timeout=3,
@@ -118,6 +118,9 @@ if REDIS_URL:
         )
         _redis_client.ping()
         print("✅ Redis connected — token blocklist persists across restarts")
+    except ImportError:
+        print("⚠️  redis package not installed — using in-memory blocklist")
+        _redis_client = None
     except Exception as e:
         print(f"⚠️  Redis unavailable ({e}), using in-memory blocklist")
         _redis_client = None
