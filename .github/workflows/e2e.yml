@@ -1,0 +1,68 @@
+# ==============================================
+# GitHub Actions — E2E Tests (Playwright)
+# PurityProp AI — Browser-level validation
+# ==============================================
+# Runs nightly + on PR to main
+# Tests against production URLs
+
+name: E2E Tests
+
+on:
+  # Run nightly at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  # Run on PR to main (optional — can be slow)
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'e2e/**'
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      E2E_BASE_URL: "https://purity-prop-ai.vercel.app"
+      E2E_API_URL: "https://puritypropai-9ri1.onrender.com"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Wake up Render backend (cold start)
+        run: |
+          echo "Waking up Render free tier backend..."
+          curl -s -o /dev/null -w "%{http_code}" $E2E_API_URL/ || true
+          sleep 30  # Wait for cold start
+
+      - name: Run Playwright tests
+        working-directory: e2e
+        run: npx playwright test --reporter=github
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
+      - name: Upload screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: e2e/test-results/
+          retention-days: 7

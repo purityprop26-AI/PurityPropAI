@@ -57,3 +57,7 @@ slowapi>=0.1.9
 langdetect>=1.0.9
 certifi
 rich>=13.0.0
+
+# --- Redis (Token Blocklist — Upstash free tier) ---
+redis>=5.0.0
+

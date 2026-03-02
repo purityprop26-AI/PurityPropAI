@@ -32,6 +32,8 @@ services:
         sync: false  # Gmail App Password
       - key: SMTP_FROM
         sync: false
+      - key: REDIS_URL
+        sync: false  # Upstash Redis free tier URL
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: APP_ENV

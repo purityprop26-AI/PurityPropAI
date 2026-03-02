@@ -34,5 +34,8 @@ ujson>=5.9.0
 certifi
 slowapi>=0.1.9
 
+# --- Redis (Token Blocklist) ---
+redis>=5.0.0
+
 # --- Production Server ---
 gunicorn>=21.2.0

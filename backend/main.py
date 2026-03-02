@@ -95,43 +95,86 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# TOKEN BLOCKLIST — In-memory JWT revocation for secure logout
+# TOKEN BLOCKLIST — Redis-backed JWT revocation for secure logout
+# Falls back to in-memory if Redis is not available
 # ══════════════════════════════════════════════════════════════════════
-# NOTE: In-memory blocklist resets on server restart.
-# For production at scale, swap with Redis: redis.sadd("blocked_tokens", jti)
+import os
 import time
 from collections import OrderedDict
 
+# Try to connect to Redis (Upstash free tier or any Redis instance)
+_redis_client = None
+REDIS_URL = os.getenv("REDIS_URL", "")
+
+if REDIS_URL:
+    try:
+        import redis
+        _redis_client = redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_timeout=3,
+            socket_connect_timeout=3,
+            retry_on_timeout=True,
+        )
+        _redis_client.ping()
+        print("✅ Redis connected — token blocklist persists across restarts")
+    except Exception as e:
+        print(f"⚠️  Redis unavailable ({e}), using in-memory blocklist")
+        _redis_client = None
+else:
+    print("ℹ️  REDIS_URL not set — using in-memory token blocklist")
+
+
 class TokenBlocklist:
     """
-    In-memory token blocklist with automatic expiry cleanup.
-    Stores JTI (JWT ID) values to enable server-side logout.
-    Max 10,000 entries with LRU eviction.
+    Hybrid token blocklist: Redis-backed with in-memory fallback.
+    - Redis: tokens survive server restarts, shared across workers
+    - In-memory: works without Redis, auto-expires, LRU eviction at 10K
     """
     MAX_SIZE = 10_000
+    REDIS_PREFIX = "blocked_jti:"
 
     def __init__(self):
-        self._blocked: OrderedDict[str, float] = OrderedDict()  # jti -> expiry_timestamp
+        self._memory: OrderedDict[str, float] = OrderedDict()
 
     def block(self, jti: str, expires_at: float):
         """Add a token JTI to the blocklist."""
+        ttl = max(int(expires_at - time.time()), 1)
+
+        # Try Redis first
+        if _redis_client:
+            try:
+                _redis_client.setex(f"{self.REDIS_PREFIX}{jti}", ttl, "1")
+                return
+            except Exception:
+                pass  # Fall through to in-memory
+
+        # In-memory fallback
         self._cleanup()
-        if len(self._blocked) >= self.MAX_SIZE:
-            # Evict oldest entry
-            self._blocked.popitem(last=False)
-        self._blocked[jti] = expires_at
+        if len(self._memory) >= self.MAX_SIZE:
+            self._memory.popitem(last=False)
+        self._memory[jti] = expires_at
 
     def is_blocked(self, jti: str) -> bool:
         """Check if a JTI is in the blocklist."""
+        # Check Redis first
+        if _redis_client:
+            try:
+                if _redis_client.exists(f"{self.REDIS_PREFIX}{jti}"):
+                    return True
+            except Exception:
+                pass  # Fall through to in-memory
+
+        # Check in-memory
         self._cleanup()
-        return jti in self._blocked
+        return jti in self._memory
 
     def _cleanup(self):
-        """Remove expired entries (tokens that have naturally expired)."""
+        """Remove expired entries from in-memory store."""
         now = time.time()
-        expired_keys = [k for k, exp in self._blocked.items() if exp < now]
-        for k in expired_keys:
-            del self._blocked[k]
+        expired = [k for k, exp in self._memory.items() if exp < now]
+        for k in expired:
+            del self._memory[k]
 
 # Global singleton — importable from other modules
 token_blocklist = TokenBlocklist()
