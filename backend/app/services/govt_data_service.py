@@ -378,8 +378,8 @@ PRE-COMPUTED VALUATION (USE THESE EXACT VALUES — do NOT recalculate):
 • Asset Category: {asset_label}
 • Data Period: 01-Jul-2024 to present (guideline revision cycle){asset_note}
 
-NOTE: These are MINIMUM government guideline values.
-Market prices are typically 20-150% higher.
+NOTE: These are MINIMUM government guideline values as published by TN Registration Department.
+Valuation derived from registry-indexed data within defined revision cycle.
 
 🔗 Verify: https://tnreginet.gov.in/portal → Guide Value → Date: 01-07-2024
 {metrics_context}"""

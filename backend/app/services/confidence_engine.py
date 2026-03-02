@@ -261,11 +261,17 @@ def compute_confidence(
     )
     score = round(min(max(score, 0.0), 1.0), 2)
 
-    # ── Hard caps by comparable count ─────────────────────────────────
-    if comparable_count <= 2:
+    # ── Hard caps by comparable count (granular) ────────────────────
+    if comparable_count <= 1:
         score = min(score, 0.35)
+    elif comparable_count <= 2:
+        score = min(score, 0.45)
     elif comparable_count <= 4:
-        score = min(score, 0.50)
+        score = min(score, 0.60)
+    elif comparable_count <= 9:
+        score = min(score, 0.75)
+    else:
+        score = min(score, 0.90)
 
     # Determine metrics tier for conditional output
     if comparable_count <= 2:
