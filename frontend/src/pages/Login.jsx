@@ -56,9 +56,12 @@ const Login = () => {
         setError('');
         setGoogleLoading(true);
         try {
+            console.log('[Google Login] Starting OAuth flow...');
             await loginWithGoogle();
+            console.log('[Google Login] OAuth redirect initiated');
             // Supabase OAuth redirects — no navigate() needed
         } catch (err) {
+            console.error('[Google Login] Error:', err);
             setError(err.message || 'Google sign-in failed. Try again.');
             setGoogleLoading(false);
         }
