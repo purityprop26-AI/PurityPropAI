@@ -2,6 +2,7 @@
 SUPABASE-NATIVE REAL ESTATE INTELLIGENCE SYSTEM
 Async Database Engine — SQLAlchemy + asyncpg
 """
+import ssl as _ssl
 import structlog
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -16,6 +17,25 @@ from typing import AsyncGenerator
 from app.core.config import get_settings
 
 logger = structlog.get_logger(__name__)
+
+# Build SSL context that works with both direct and pooler Supabase connections
+try:
+    _ssl_context = _ssl.create_default_context()
+    _ssl_context.check_hostname = False
+    _ssl_context.verify_mode = _ssl.CERT_NONE
+    _intelligence_connect_args = {
+        "ssl": _ssl_context,
+        "server_settings": {
+            "statement_timeout": "30000",
+        },
+    }
+except Exception:
+    _intelligence_connect_args = {
+        "ssl": "require",
+        "server_settings": {
+            "statement_timeout": "30000",
+        },
+    }
 
 
 class Base(DeclarativeBase):
@@ -41,13 +61,7 @@ def get_engine():
             pool_recycle=settings.db_pool_recycle,
             pool_pre_ping=True,
             echo=settings.db_echo,
-            connect_args={
-                "ssl": "require",
-                "server_settings": {
-                    "hnsw.iterative_scan": "relaxed_order",
-                    "statement_timeout": "30000",
-                },
-            },
+            connect_args=_intelligence_connect_args,
         )
         logger.info(
             "async_engine_created",

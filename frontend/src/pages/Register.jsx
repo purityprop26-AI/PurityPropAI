@@ -23,7 +23,7 @@ const Register = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
-    const { loginWithGoogle } = useAuth();
+    const { loginWithGoogle, loginWithToken } = useAuth();
     const navigate = useNavigate();
 
     const calcStrength = (pwd) => {
@@ -93,9 +93,7 @@ const Register = () => {
             // Success handling
             if (data.auto_verified && data.access_token) {
                 // Auto-verified (no SMTP configured) — log in directly
-                const { loginWithToken } = await import('../context/AuthContext').then(m => ({ loginWithToken: null }));
-                // Store token and user data, then redirect
-                localStorage.setItem('purityprop_token', data.access_token);
+                await loginWithToken(data.access_token, data.user);
                 navigate('/dashboard');
             } else {
                 // OTP flow — redirect to verification page
