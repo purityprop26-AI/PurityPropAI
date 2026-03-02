@@ -69,29 +69,56 @@ export const AuthProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        _tokenRef.current = session.access_token;
-        setToken(session.access_token);
-        setUser(extractUser(session));
+    let isMounted = true;
+
+    // Initial session check — handles stale tokens gracefully
+    const initSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (!isMounted) return;
+
+        if (error) {
+          // Stale token → 401 from Supabase. Clear it silently.
+          await supabase.auth.signOut();
+          _tokenRef.current = null;
+          setToken(null);
+          setUser(null);
+        } else if (session) {
+          _tokenRef.current = session.access_token;
+          setToken(session.access_token);
+          setUser(extractUser(session));
+        }
+      } catch {
+        // Network error or Supabase down — don't crash, just skip
+        _tokenRef.current = null;
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
-    }).catch((err) => {
-      console.warn("Retrying session fetch - initial attempt failed:", err);
-      setLoading(false);
-    });
+    };
+
+    initSession();
 
     // Auth state listener — handles login, logout, AND token auto-refresh.
     // This is the ONLY place token is updated — interceptor reads from _tokenRef.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (!isMounted) return;
+
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          // Refresh failed → stale session, clear everything
+          _tokenRef.current = null;
+          setToken(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
         if (session) {
-          _tokenRef.current = session.access_token;  // FIX [HIGH-F2]: Keep ref fresh
+          _tokenRef.current = session.access_token;
           setToken(session.access_token);
           setUser(extractUser(session));
         } else {
-          _tokenRef.current = null;  // FIX [HIGH-F2]: Clear on logout
+          _tokenRef.current = null;
           setToken(null);
           setUser(null);
         }
@@ -99,7 +126,10 @@ export const AuthProvider = ({ children }) => {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
 
