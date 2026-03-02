@@ -69,10 +69,13 @@ async def register(request: RegisterRequest, client_ip: str, db: AsyncSession) -
     1. Rate-limit by IP
     2. Check for duplicate email
     3. Hash password
-    4. Create user (is_verified=False)
-    5. Generate OTP → send email
-    6. Return success (no access token yet — must verify first)
+    4. Create user
+    5. If SMTP configured: send OTP email, require verification
+    6. If SMTP NOT configured: auto-verify, return access token
     """
+    import os
+    smtp_configured = bool(os.getenv("SMTP_USER", ""))
+
     # Rate limit
     allowed, retry_after = check_register_rate(client_ip)
     if not allowed:
@@ -85,7 +88,7 @@ async def register(request: RegisterRequest, client_ip: str, db: AsyncSession) -
             raise ValueError("This email is registered via Google. Please use Google Sign-In.")
         raise ValueError("This email is already registered. Please login.")
 
-    # Create user
+    # Create user — auto-verify if SMTP is not configured
     pwd_hash = hash_password(request.password)
     user = await repo.create_user(
         db,
@@ -93,29 +96,61 @@ async def register(request: RegisterRequest, client_ip: str, db: AsyncSession) -
         name          = request.name,
         password_hash = pwd_hash,
         provider      = "email",
-        is_verified   = False,
+        is_verified   = not smtp_configured,  # auto-verify when no SMTP
     )
 
-    # Generate + store OTP
-    otp_plain, otp_hash = generate_otp()
-    await repo.create_otp(db, user.id, otp_hash)
-    await db.commit()
+    if smtp_configured:
+        # OTP flow — require email verification
+        otp_plain, otp_hash = generate_otp()
+        await repo.create_otp(db, user.id, otp_hash)
+        await db.commit()
 
-    # Send email (non-blocking — failure doesn't abort registration)
-    email_sent = await send_otp_email(request.email, request.name, otp_plain)
+        email_sent = await send_otp_email(request.email, request.name, otp_plain)
 
-    logger.info(
-        "user_registered",
-        user_id = str(user.id),
-        email   = request.email,
-        email_sent = email_sent,
-    )
+        logger.info(
+            "user_registered",
+            user_id = str(user.id),
+            email   = request.email,
+            email_sent = email_sent,
+        )
 
-    return {
-        "message"   : "Account created. Please check your email for the verification code.",
-        "email"     : request.email,
-        "email_sent": email_sent,
-    }
+        return {
+            "message"   : "Account created. Please check your email for the verification code.",
+            "email"     : request.email,
+            "email_sent": email_sent,
+            "auto_verified": False,
+        }
+    else:
+        # No SMTP — auto-verify and issue token immediately
+        await db.commit()
+
+        token, expires_in = create_access_token(
+            user_id     = str(user.id),
+            email       = user.email,
+            provider    = user.provider,
+            is_verified = True,
+        )
+
+        logger.info(
+            "user_registered_auto_verified",
+            user_id = str(user.id),
+            email   = request.email,
+        )
+
+        return {
+            "message"       : "Account created and verified successfully!",
+            "email"         : request.email,
+            "auto_verified" : True,
+            "access_token"  : token,
+            "expires_in"    : expires_in,
+            "user": {
+                "user_id"    : str(user.id),
+                "email"      : user.email,
+                "name"       : user.name,
+                "provider"   : user.provider,
+                "is_verified": True,
+            },
+        }
 
 
 # ═══════════════════════════════════════════════════════════════════════

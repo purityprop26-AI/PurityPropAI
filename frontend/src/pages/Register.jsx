@@ -90,10 +90,19 @@ const Register = () => {
                 return;
             }
 
-            // Success → redirect to OTP verification page
-            navigate('/verify-email', {
-                state: { email: formData.email, name: formData.name.trim() },
-            });
+            // Success handling
+            if (data.auto_verified && data.access_token) {
+                // Auto-verified (no SMTP configured) — log in directly
+                const { loginWithToken } = await import('../context/AuthContext').then(m => ({ loginWithToken: null }));
+                // Store token and user data, then redirect
+                localStorage.setItem('purityprop_token', data.access_token);
+                navigate('/dashboard');
+            } else {
+                // OTP flow — redirect to verification page
+                navigate('/verify-email', {
+                    state: { email: formData.email, name: formData.name.trim() },
+                });
+            }
 
         } catch (err) {
             setError(err.message === 'Failed to fetch'

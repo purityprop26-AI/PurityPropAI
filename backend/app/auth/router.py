@@ -82,6 +82,9 @@ async def register(
 ):
     try:
         result = await service.register(body, _client_ip(request), db)
+        if result.get("auto_verified"):
+            # Auto-verified — return full response with token
+            return JSONResponse(status_code=201, content=result)
         return MessageResponse(message=result["message"])
     except PermissionError as e:
         raise HTTPException(status_code=429, detail=str(e))
