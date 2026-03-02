@@ -51,6 +51,15 @@ async def get_current_user(request: Request) -> dict:
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Check if token has been revoked via logout
+    from main import token_blocklist
+    jti = payload.get("jti")
+    if jti and token_blocklist.is_blocked(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return payload
 
 
@@ -199,11 +208,15 @@ async def google_auth(
 @router.post(
     "/logout",
     response_model=MessageResponse,
-    summary="Logout (stateless JWT — client must discard token)",
+    summary="Logout — revokes JWT server-side via blocklist",
 )
 async def logout(current_user: dict = Depends(get_current_user)):
-    # JWT is stateless — logout is client-side (discard token).
-    # Future: add token to a blocklist/Redis set here.
+    # Add the token's JTI to the blocklist so it can't be reused
+    from main import token_blocklist
+    jti = current_user.get("jti")
+    exp = current_user.get("exp", 0)
+    if jti:
+        token_blocklist.block(jti, float(exp))
     return MessageResponse(message="Logged out successfully.")
 
 

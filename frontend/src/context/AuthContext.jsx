@@ -175,7 +175,6 @@ export const AuthProvider = ({ children }) => {
 
   /** Google OAuth — triggers Supabase OAuth redirect flow */
   const loginWithGoogle = async () => {
-    console.log('[loginWithGoogle] Calling supabase.auth.signInWithOAuth...');
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -183,11 +182,8 @@ export const AuthProvider = ({ children }) => {
         queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     });
-    console.log('[loginWithGoogle] Result:', { data, error });
     if (error) {
-      console.error('[loginWithGoogle] Error:', error);
-      const err = new Error(error.message);
-      throw err;
+      throw new Error(error.message);
     }
     // Supabase will redirect — no return value needed
   };

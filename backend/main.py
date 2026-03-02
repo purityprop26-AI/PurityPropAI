@@ -3,22 +3,23 @@ PurityProp AI — Unified FastAPI Application Entry Point
 
 Mounts:
   /api          → Chat + Session routes (auth/chat stack)
-  /api          → Auth routes (Supabase auth)
   /api/v1       → Intelligence API (hybrid search, LLM, hallucination guard)
+  /auth         → Auth v2 (register, login, Google OAuth, OTP, reset)
 
-Fixes applied:
-  [MED-B6]   Raw SQL now wrapped in text() — SQLAlchemy 2.x compliance
-  [CRIT-B1]  LLM service shutdown registered on app teardown (async close)
-  [LOW-B4]   /health and /api/health/db separated (liveness vs readiness)
+Security:
+  - CSP headers on all responses
+  - CORS locked to known origins + Vercel previews
+  - Rate limiting (60/min global, per-IP)
+  - JWT token blocklist for secure logout
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 
 from app.routes import router
-from app.auth_routes import router as auth_router
 from app.config import settings
 from app.database import init_db, close_db
 
@@ -40,6 +41,100 @@ try:
 except ImportError as e:
     print(f"⚠️  Auth v2 not available: {e}")
     AUTH_V2_AVAILABLE = False
+
+
+# ══════════════════════════════════════════════════════════════════════
+# SECURITY: CSP + Security Headers Middleware
+# ══════════════════════════════════════════════════════════════════════
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Adds security headers to every response:
+    - Content-Security-Policy (CSP)
+    - X-Content-Type-Options
+    - X-Frame-Options
+    - Strict-Transport-Security (HSTS)
+    - Referrer-Policy
+    - Permissions-Policy
+    """
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+
+        # CSP — allows self, Google OAuth, Supabase, and inline styles (React needs them)
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' https://accounts.google.com https://apis.google.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            "img-src 'self' data: https: blob:",
+            "connect-src 'self' https://*.supabase.co https://api.groq.com https://*.onrender.com wss://*.supabase.co",
+            "frame-src https://accounts.google.com",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ]
+        response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
+
+        # Prevent MIME-type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+
+        # Enable HSTS (1 year, include subdomains)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        # Control referrer information
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Restrict browser features
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+
+        return response
+
+
+# ══════════════════════════════════════════════════════════════════════
+# TOKEN BLOCKLIST — In-memory JWT revocation for secure logout
+# ══════════════════════════════════════════════════════════════════════
+# NOTE: In-memory blocklist resets on server restart.
+# For production at scale, swap with Redis: redis.sadd("blocked_tokens", jti)
+import time
+from collections import OrderedDict
+
+class TokenBlocklist:
+    """
+    In-memory token blocklist with automatic expiry cleanup.
+    Stores JTI (JWT ID) values to enable server-side logout.
+    Max 10,000 entries with LRU eviction.
+    """
+    MAX_SIZE = 10_000
+
+    def __init__(self):
+        self._blocked: OrderedDict[str, float] = OrderedDict()  # jti -> expiry_timestamp
+
+    def block(self, jti: str, expires_at: float):
+        """Add a token JTI to the blocklist."""
+        self._cleanup()
+        if len(self._blocked) >= self.MAX_SIZE:
+            # Evict oldest entry
+            self._blocked.popitem(last=False)
+        self._blocked[jti] = expires_at
+
+    def is_blocked(self, jti: str) -> bool:
+        """Check if a JTI is in the blocklist."""
+        self._cleanup()
+        return jti in self._blocked
+
+    def _cleanup(self):
+        """Remove expired entries (tokens that have naturally expired)."""
+        now = time.time()
+        expired_keys = [k for k, exp in self._blocked.items() if exp < now]
+        for k in expired_keys:
+            del self._blocked[k]
+
+# Global singleton — importable from other modules
+token_blocklist = TokenBlocklist()
 
 
 @asynccontextmanager
@@ -72,7 +167,6 @@ async def lifespan(app: FastAPI):
         try:
             from app.database import engine as chat_engine
             from app.auth.models import UserProfile, OTPRecord
-            from sqlalchemy import inspect
             async with chat_engine.begin() as conn:
                 await conn.run_sync(
                     lambda sync_conn: (
@@ -91,7 +185,7 @@ async def lifespan(app: FastAPI):
     # --- SHUTDOWN ---
     print("🛑 Shutting down PurityProp AI...")
 
-    # Shutdown LLM service persistent client (FIX: graceful async close)
+    # Shutdown LLM service persistent client
     try:
         from app.services.llm_service import llm_service
         await llm_service.close()
@@ -135,12 +229,16 @@ async def lifespan(app: FastAPI):
 # --- Application factory ---
 app = FastAPI(
     title=settings.app_name,
-    version="2.0.0",
+    version="2.1.0",
     description="PurityProp AI — Tamil Nadu Real Estate Intelligence Platform",
     docs_url="/docs" if settings.debug else None,   # Hidden in production
-    redoc_url="/redoc" if settings.debug else None, # Hidden in production
+    redoc_url="/redoc" if settings.debug else None,  # Hidden in production
     lifespan=lifespan,
 )
+
+
+# --- Security Headers Middleware (MUST be added BEFORE CORS) ---
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # --- CORS --- (centralized, from settings + dynamic Vercel preview support)
@@ -169,7 +267,6 @@ except ImportError:
 
 
 # --- Routers ---
-app.include_router(auth_router, prefix="/api")
 app.include_router(router, prefix="/api")
 
 if AUTH_V2_AVAILABLE:
@@ -188,7 +285,7 @@ def root():
     return {
         "message": "PurityProp AI — Tamil Nadu Real Estate Intelligence",
         "status": "alive",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "intelligence": "enabled" if INTELLIGENCE_AVAILABLE else "disabled",
         "environment": "development" if settings.debug else "production",
     }
@@ -199,13 +296,11 @@ def root():
 async def db_health_check():
     """
     Readiness probe — verifies database connectivity.
-    FIX [MED-B6]: Raw SQL now uses text() wrapper (SQLAlchemy 2.x compliant).
     NOTE: Do NOT use this as liveness probe — DB slowness should not kill the container.
     """
     try:
         from app.database import get_db
         async for db in get_db():
-            # FIX [MED-B6]: correct text() wrapper — was missing before
             await db.execute(text("SELECT 1"))
             return {
                 "status": "ready",
