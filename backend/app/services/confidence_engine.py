@@ -235,9 +235,14 @@ def compute_confidence(
     """
     5-factor deterministic confidence score [0.00 — 1.00].
 
-    Formula:
-      score = (data_coverage × 0.35) + (recency × 0.25) + (comparable_density × 0.20)
-            + (variance_stability × 0.10) + (micro_market_match × 0.10)
+    Formula (revised weights):
+      score = (transaction_density × 0.30) + (recency × 0.25)
+            + (variance_stability × 0.15) + (micro_market_match × 0.15)
+            + (data_coverage × 0.15)
+
+    Hard caps by comparable count:
+      1-2 comparables → max 0.35
+      3-4 comparables → max 0.50
 
     Returns: (score, breakdown_dict)
     """
@@ -248,21 +253,39 @@ def compute_confidence(
     mmatch = compute_micro_market_match(locality, is_exact_match)
 
     score = (
-        data_cov * 0.35 +
+        comp_density * 0.30 +
         recency * 0.25 +
-        comp_density * 0.20 +
-        var_stability * 0.10 +
-        mmatch * 0.10
+        var_stability * 0.15 +
+        mmatch * 0.15 +
+        data_cov * 0.15
     )
     score = round(min(max(score, 0.0), 1.0), 2)
 
+    # ── Hard caps by comparable count ─────────────────────────────────
+    if comparable_count <= 2:
+        score = min(score, 0.35)
+    elif comparable_count <= 4:
+        score = min(score, 0.50)
+
+    # Determine metrics tier for conditional output
+    if comparable_count <= 2:
+        metrics_tier = "minimal"        # Raw prices only, no modeling
+    elif comparable_count <= 4:
+        metrics_tier = "basic"          # Min/Max/Median only
+    elif comparable_count <= 9:
+        metrics_tier = "intermediate"   # + IQR, StdDev, CoV
+    else:
+        metrics_tier = "full"           # + Liquidity, CAGR, Variance
+
     breakdown = {
-        "data_coverage": {"value": round(data_cov, 3), "weight": 0.35, "contribution": round(data_cov * 0.35, 3)},
+        "transaction_density": {"value": round(comp_density, 3), "weight": 0.30, "contribution": round(comp_density * 0.30, 3)},
         "recency": {"value": round(recency, 3), "weight": 0.25, "contribution": round(recency * 0.25, 3)},
-        "comparable_density": {"value": round(comp_density, 3), "weight": 0.20, "contribution": round(comp_density * 0.20, 3)},
-        "variance_stability": {"value": round(var_stability, 3), "weight": 0.10, "contribution": round(var_stability * 0.10, 3)},
-        "micro_market_match": {"value": round(mmatch, 3), "weight": 0.10, "contribution": round(mmatch * 0.10, 3)},
+        "variance_stability": {"value": round(var_stability, 3), "weight": 0.15, "contribution": round(var_stability * 0.15, 3)},
+        "micro_market_match": {"value": round(mmatch, 3), "weight": 0.15, "contribution": round(mmatch * 0.15, 3)},
+        "data_coverage": {"value": round(data_cov, 3), "weight": 0.15, "contribution": round(data_cov * 0.15, 3)},
         "total": score,
+        "metrics_tier": metrics_tier,
+        "comparable_count": comparable_count,
     }
 
     return score, breakdown
@@ -375,35 +398,65 @@ def compute_all_metrics(
 
 
 def format_metrics_for_context(metrics: Dict, locality: str) -> str:
-    """Format computed metrics as context block for LLM injection."""
+    """Format computed metrics as context block for LLM injection.
+    Conditionally includes sections based on comparable count thresholds."""
     infra = metrics["infrastructure_premium"]
     stats = metrics["statistics"]
     cb = metrics["confidence_breakdown"]
     features_str = ", ".join(metrics.get("locality_features", [])) or "General residential"
+    metrics_tier = cb.get("metrics_tier", "minimal")
+    comp_count = cb.get("comparable_count", metrics.get("comparable_count", 1))
 
-    return f"""
-DETERMINISTIC AVM METRICS — {locality.title()} (Computed by PurityProp Engine, NOT estimated):
+    # Base context — always included
+    context = f"""
+DETERMINISTIC AVM METRICS — {locality.title()} (PurityProp Engine):
 • Zone Tier: {metrics['zone_tier']}
 • Locality Features: {features_str}
-• Confidence Score: {metrics['confidence']:.2f} ({metrics['confidence_band']})
-  Breakdown:
-    Data Coverage:      {cb['data_coverage']['value']:.3f} × 0.35 = {cb['data_coverage']['contribution']:.3f}
-    Recency:            {cb['recency']['value']:.3f} × 0.25 = {cb['recency']['contribution']:.3f}
-    Comparable Density: {cb['comparable_density']['value']:.3f} × 0.20 = {cb['comparable_density']['contribution']:.3f}
-    Variance Stability: {cb['variance_stability']['value']:.3f} × 0.10 = {cb['variance_stability']['contribution']:.3f}
-    Micro-Market Match: {cb['micro_market_match']['value']:.3f} × 0.10 = {cb['micro_market_match']['contribution']:.3f}
-    TOTAL = {cb['total']:.2f}
-• Volatility: {metrics['volatility_label']} ({metrics['volatility_score']:.3f})
-• Liquidity: {metrics['liquidity_label']} (score: {metrics['liquidity_score']:.2f})
-• Statistics: Median ₹{stats['median']:,}/sqft | StdDev ₹{stats['std_dev']:,} | CoV {stats['cov']:.3f}
-• IQR Band: {stats['iqr_band']} | Outlier Filter: {stats['outlier_method']}
-• Infrastructure Premium: Metro {infra['metro']}, IT Corridor {infra['it_corridor']}, Highway {infra['highway']}, Commercial {infra['commercial']} → Total {infra['total']}
-• Comparables Used: {metrics['comparable_count']}
+• Comparable Count: {comp_count}
+• Metrics Tier: {metrics_tier.upper()} (based on comparable density)
 • Data Source: {metrics['data_source']}
 • Data Period: {metrics['last_updated']}
+• Search Radius: 0.5 km (primary locality)
 
-INSTRUCTION: Use the EXACT confidence score {metrics['confidence']:.2f} ({metrics['confidence_band']}) in your response.
-Show the confidence breakdown as given above. Do NOT estimate different values.
-Use the EXACT volatility "{metrics['volatility_label']}" and liquidity "{metrics['liquidity_label']}".
-Include IQR band and outlier method in your statistical summary.
+• Confidence Index: {metrics['confidence']:.2f} ({metrics['confidence_band']})
+  Breakdown:
+    Transaction Density: {cb['transaction_density']['value']:.3f} × 0.30 = {cb['transaction_density']['contribution']:.3f}
+    Recency:             {cb['recency']['value']:.3f} × 0.25 = {cb['recency']['contribution']:.3f}
+    Variance Stability:  {cb['variance_stability']['value']:.3f} × 0.15 = {cb['variance_stability']['contribution']:.3f}
+    Micro-Market Match:  {cb['micro_market_match']['value']:.3f} × 0.15 = {cb['micro_market_match']['contribution']:.3f}
+    Data Coverage:       {cb['data_coverage']['value']:.3f} × 0.15 = {cb['data_coverage']['contribution']:.3f}
+    TOTAL = {cb['total']:.2f}
 """
+
+    # Volatility — always show (derived from price range)
+    context += f"• Volatility: {metrics['volatility_label']} ({metrics['volatility_score']:.3f})\n"
+
+    # Conditional sections based on metrics_tier
+    if metrics_tier in ("intermediate", "full"):
+        # 5+ comparables: show IQR, StdDev, CoV
+        context += f"• Statistics: Median {stats['median']:,}/sqft | StdDev {stats['std_dev']:,} | CoV {stats['cov']:.3f}\n"
+        context += f"• IQR Band: {stats['iqr_band']} | Outlier Filter: {stats['outlier_method']}\n"
+
+    if metrics_tier == "full":
+        # 10+ comparables: show liquidity
+        context += f"• Liquidity: {metrics['liquidity_label']} (score: {metrics['liquidity_score']:.2f})\n"
+
+    context += f"• Infrastructure: Metro {infra['metro']}, IT {infra['it_corridor']}, Highway {infra['highway']}, Commercial {infra['commercial']} = Total {infra['total']}\n"
+
+    # Risk disclosure
+    if comp_count < 5:
+        context += "\nRISK DISCLOSURE: Statistical modeling limited due to low transaction density. Values reflect observed registry data only.\n"
+
+    if metrics.get("data_age_months", 0) > 12:
+        context += "RECENCY NOTE: Data recency impact acknowledged in confidence index.\n"
+
+    # Instructions for LLM
+    context += f"""
+INSTRUCTION: Use EXACT confidence {metrics['confidence']:.2f} ({metrics['confidence_band']}).
+Metrics tier is {metrics_tier.upper()} — show ONLY sections permitted for this tier.
+{'Show Min/Max/Median ONLY. NO IQR, NO StdDev, NO CoV, NO CAGR.' if metrics_tier in ('minimal', 'basic') else ''}
+{'Show IQR/StdDev/CoV. NO liquidity modeling, NO CAGR.' if metrics_tier == 'intermediate' else ''}
+{'Full analytics enabled.' if metrics_tier == 'full' else ''}
+Do NOT use placeholder values. If a metric cannot be computed, omit the section entirely.
+"""
+    return context
