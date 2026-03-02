@@ -71,14 +71,62 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
 
-    // Initial session check — handles stale tokens gracefully
+    /**
+     * Pre-check: Clear stale Supabase token from localStorage BEFORE
+     * getSession() makes the HTTP call. This prevents the 401 error
+     * from appearing in the console entirely.
+     *
+     * Why: Supabase stores auth tokens in localStorage. When getSession()
+     * runs, it finds the token and sends GET /auth/v1/user. If the token
+     * is expired, Supabase returns 401 → browser logs a red error.
+     * By clearing expired tokens BEFORE the HTTP call, the 401 never happens.
+     */
+    const clearStaleTokens = () => {
+      try {
+        // Supabase storage key format: sb-{project_ref}-auth-token
+        const keys = Object.keys(localStorage);
+        for (const key of keys) {
+          if (!key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+
+          const parsed = JSON.parse(raw);
+          const accessToken = parsed?.access_token;
+          if (!accessToken) continue;
+
+          // Decode JWT payload (base64) to check expiry
+          const parts = accessToken.split('.');
+          if (parts.length !== 3) {
+            localStorage.removeItem(key);
+            continue;
+          }
+
+          const payload = JSON.parse(atob(parts[1]));
+          const exp = payload?.exp;
+          const now = Math.floor(Date.now() / 1000);
+
+          // If token expired more than 60 seconds ago, clear it
+          // (Supabase has a 60s grace period for refresh)
+          if (exp && exp < now - 60) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch {
+        // If anything fails, just skip — getSession will handle it
+      }
+    };
+
+    // Step 1: Clear stale tokens BEFORE any HTTP calls
+    clearStaleTokens();
+
+    // Step 2: Now safe to call getSession — no stale tokens → no 401
     const initSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (!isMounted) return;
 
         if (error) {
-          // Stale token → 401 from Supabase. Clear it silently.
           await supabase.auth.signOut();
           _tokenRef.current = null;
           setToken(null);
@@ -89,7 +137,6 @@ export const AuthProvider = ({ children }) => {
           setUser(extractUser(session));
         }
       } catch {
-        // Network error or Supabase down — don't crash, just skip
         _tokenRef.current = null;
       } finally {
         if (isMounted) setLoading(false);
