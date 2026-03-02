@@ -106,13 +106,19 @@ MANDATORY OUTPUT STRUCTURE FOR PRICE QUERIES:
 Each section starts with the emoji on a new line. Max 2-3 lines per section. No narrative. No filler.
 
 📍 Micro-Market Profile — Zone tier, area type, key characteristic (2 lines max).
-💰 Market Valuation Range — ₹X – ₹Y per sq.ft | ₹A Cr – ₹B Cr per ground. VERIFY: A = X×2400, B = Y×2400.
-📊 Benchmark Average — Average = (X + Y) / 2 = ₹Z per sq.ft | ₹W Cr per ground. Show math explicitly.
+💰 Market Valuation Range — ₹X – ₹Y per sq.ft | ₹A Cr – ₹B Cr per ground. VERIFY: A = X×2400, B = Y×2400. State asset type explicitly.
+📊 Statistical Summary — Median: ₹Z/sqft | StdDev: ₹W | CoV: X.XXX | IQR Band: ₹min–₹max | Comparable Sources: N | Data Period: dates
 📈 Appreciation Outlook — 3-Year CAGR Band: X% – Y%. One line reasoning.
-📉 Liquidity Assessment — Rating: Low/Moderate/High. One line.
+📉 Liquidity Index — Score: 0.XX (Low/Moderate/High). Time-to-sale estimate.
+⚠️ Volatility Band — Score: 0.XXX (Low/Moderate/Elevated). One line.
 🏗️ Key Price Drivers — 3-5 bullet points with •
-📊 Risk & Volatility Band — Low / Moderate / Elevated. One line.
-🧠 Confidence Index — 0.XX (0-1 scale). One line explanation.
+🧠 Confidence Index — Score: 0.XX (Band). Show calculation breakdown:
+  Data Coverage: X.XXX × 0.35 = X.XXX
+  Recency: X.XXX × 0.25 = X.XXX
+  Comparable Density: X.XXX × 0.20 = X.XXX
+  Variance Stability: X.XXX × 0.10 = X.XXX
+  Micro-Market Match: X.XXX × 0.10 = X.XXX
+  TOTAL = 0.XX
 🚀 Upgrade Insight — "Unlock parcel-level precision modeling, absorption analytics, and forecast intelligence — PurityProp Pro."
 
 FORMATTING RULES:
@@ -244,19 +250,33 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": settings.llm_temperature,  # Controlled via config (default 0.3)
+                "temperature": settings.llm_temperature,
                 "max_tokens": settings.llm_max_tokens,
             }
 
-            # Fully async — does NOT block the event loop
-            response = await self._client.post(
-                self.api_url, json=payload, headers=headers
-            )
-            response.raise_for_status()
+            # Retry with exponential backoff for transient errors
+            import asyncio
+            last_error = None
+            for attempt in range(3):
+                try:
+                    response = await self._client.post(
+                        self.api_url, json=payload, headers=headers
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    assistant_message = result["choices"][0]["message"]["content"]
+                    return assistant_message, language
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code in (429, 500, 502, 503) and attempt < 2:
+                        wait = 2 ** attempt  # 1s, 2s
+                        logger.warning("groq_retry", attempt=attempt+1, status=e.response.status_code, wait=wait)
+                        await asyncio.sleep(wait)
+                        last_error = e
+                        continue
+                    raise  # Non-retryable or final attempt
 
-            result = response.json()
-            assistant_message = result["choices"][0]["message"]["content"]
-            return assistant_message, language
+            if last_error:
+                raise last_error
 
         except httpx.HTTPStatusError as e:
             logger.error("groq_api_http_error", status=e.response.status_code, body=e.response.text[:200])

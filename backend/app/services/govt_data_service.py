@@ -258,10 +258,38 @@ LOCALITY_KEYWORDS = {
 }
 
 
+def extract_asset_type(query: str) -> str:
+    """
+    Deterministic asset type extraction from user query.
+    Returns: 'land', 'apartment', 'villa', or 'commercial'.
+    Default: 'land' (most TN real estate queries are about land/plots).
+    """
+    q = query.lower()
+    if any(w in q for w in ['apartment', 'flat', 'floor', 'bhk', '1bhk', '2bhk', '3bhk', '4bhk',
+                             'apartment price', 'flat price', 'flat rate']):
+        return 'apartment'
+    if any(w in q for w in ['villa', 'independent house', 'individual house', 'bungalow',
+                             'duplex', 'row house']):
+        return 'villa'
+    if any(w in q for w in ['commercial', 'office', 'shop', 'showroom', 'godown',
+                             'warehouse', 'industrial']):
+        return 'commercial'
+    return 'land'
+
+
+# Asset-type price adjustment factors (relative to base guideline = land)
+ASSET_TYPE_FACTORS = {
+    "land":       1.00,  # Base — guideline values are for plots/land
+    "apartment":  0.85,  # Apartments: ~85% of land rate per UDS sqft
+    "villa":      1.10,  # Villas: ~110% premium over land rate
+    "commercial": 1.30,  # Commercial: ~130% premium over land rate
+}
+
+
 def get_guideline_value(query: str) -> str:
     """
     Look up guideline value for a locality from TN Registration Dept data (Jul 2024).
-    Returns a formatted string with value range and links.
+    Includes asset-type segregation — land vs apartment vs villa vs commercial.
     """
     query_lower = query.lower()
 
@@ -286,10 +314,18 @@ def get_guideline_value(query: str) -> str:
     if not loc_data:
         return ""
 
+    # ── Asset type segregation ─────────────────────────────────────────
+    asset_type = extract_asset_type(query)
+    asset_factor = ASSET_TYPE_FACTORS.get(asset_type, 1.0)
+
     locality_display = matched_key.title()
     city_display = matched_city.title()
-    min_val = loc_data["min"]
-    max_val = loc_data["max"]
+    base_min = loc_data["min"]
+    base_max = loc_data["max"]
+
+    # Apply asset-type adjustment
+    min_val = int(base_min * asset_factor)
+    max_val = int(base_max * asset_factor)
 
     # Pre-compute ALL values so LLM doesn't need to do arithmetic
     avg_sqft = (min_val + max_val) / 2
@@ -310,14 +346,26 @@ def get_guideline_value(query: str) -> str:
         locality=matched_key,
         min_price=min_val,
         max_price=max_val,
-        data_age_months=8,  # Jul 2024 → ~8 months
+        data_age_months=20,  # Jul 2024 → Mar 2026 = ~20 months
         comparable_count=1,  # Guideline data = 1 comparable source
         has_guideline_data=True,
     )
     metrics_context = format_metrics_for_context(metrics, matched_key)
 
+    asset_label = {
+        "land": "Residential Plot / Land",
+        "apartment": "Apartment / Flat (UDS-adjusted)",
+        "villa": "Villa / Independent House",
+        "commercial": "Commercial Property",
+    }.get(asset_type, "Residential")
+
+    asset_note = ""
+    if asset_type != "land":
+        asset_note = f"\n⚠️ ASSET-TYPE ADJUSTMENT: Base guideline (land) ₹{base_min:,}–₹{base_max:,}/sqft × {asset_factor:.2f} factor = ₹{min_val:,}–₹{max_val:,}/sqft"
+
     return f"""OFFICIAL GUIDELINE VALUE — {locality_display}, {city_display} (as of 01-Jul-2024):
 Source: Tamil Nadu Registration Department (tnreginet.gov.in)
+Asset Type: {asset_label}
 
 PRE-COMPUTED VALUATION (USE THESE EXACT VALUES — do NOT recalculate):
 • Per sq.ft range: ₹{min_val:,} – ₹{max_val:,}
@@ -326,7 +374,9 @@ PRE-COMPUTED VALUATION (USE THESE EXACT VALUES — do NOT recalculate):
 • Average per sq.ft: ₹{int(avg_sqft):,}
 • Average per ground: {fmt_ground(avg_ground)}
   (Calculation: (₹{min_val:,} + ₹{max_val:,}) / 2 = ₹{int(avg_sqft):,} × 2,400 = ₹{avg_ground:,.0f})
-• Type: Residential plot/land
+• 1 Ground = 2,400 sq.ft (standard TN measurement)
+• Asset Category: {asset_label}
+• Data Period: 01-Jul-2024 to present (guideline revision cycle){asset_note}
 
 NOTE: These are MINIMUM government guideline values.
 Market prices are typically 20-150% higher.
