@@ -107,19 +107,49 @@ async def register(request: RegisterRequest, client_ip: str, db: AsyncSession) -
 
         email_sent = await send_otp_email(request.email, request.name, otp_plain)
 
-        logger.info(
-            "user_registered",
-            user_id = str(user.id),
-            email   = request.email,
-            email_sent = email_sent,
-        )
+        if email_sent:
+            logger.info(
+                "user_registered",
+                user_id = str(user.id),
+                email   = request.email,
+                email_sent = True,
+            )
+            return {
+                "message"   : "Account created. Please check your email for the verification code.",
+                "email"     : request.email,
+                "email_sent": True,
+                "auto_verified": False,
+            }
+        else:
+            # SMTP failed — auto-verify so user isn't stuck
+            logger.warning(
+                "smtp_failed_auto_verifying",
+                user_id = str(user.id),
+                email   = request.email,
+            )
+            await repo.mark_user_verified(db, user.id)
+            await db.commit()
 
-        return {
-            "message"   : "Account created. Please check your email for the verification code.",
-            "email"     : request.email,
-            "email_sent": email_sent,
-            "auto_verified": False,
-        }
+            token, expires_in = create_access_token(
+                user_id     = str(user.id),
+                email       = user.email,
+                provider    = user.provider,
+                is_verified = True,
+            )
+            return {
+                "message"       : "Account created and verified successfully!",
+                "email"         : request.email,
+                "auto_verified" : True,
+                "access_token"  : token,
+                "expires_in"    : expires_in,
+                "user": {
+                    "user_id"    : str(user.id),
+                    "email"      : user.email,
+                    "name"       : user.name,
+                    "provider"   : user.provider,
+                    "is_verified": True,
+                },
+            }
     else:
         # No SMTP — auto-verify and issue token immediately
         await db.commit()

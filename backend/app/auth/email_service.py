@@ -93,11 +93,26 @@ def _send_smtp(to_email: str, subject: str, html_body: str) -> None:
     msg["To"]      = to_email
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASS)
-        server.sendmail(SMTP_FROM, to_email, msg.as_string())
+    # Try STARTTLS on port 587 first (standard)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+            return  # Success
+    except Exception as e:
+        logger.warning("smtp_starttls_failed", port=SMTP_PORT, error=str(e))
+
+    # Fallback: SSL on port 465 (some cloud providers block port 587)
+    try:
+        with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=30) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+            return  # Success
+    except Exception as e:
+        logger.error("smtp_ssl_also_failed", port=465, error=str(e))
+        raise  # Let caller handle
 
 
 # ── Public API ─────────────────────────────────────────────────────────
