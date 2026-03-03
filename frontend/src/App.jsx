@@ -8,12 +8,13 @@
  *   [CRIT-F1]  Chat.jsx dead code confirmed removed from routing (never was routed, confirmed safe)
  */
 
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
+import { startKeepAlive, stopKeepAlive } from './utils/keepAlive';
 
 // CSS eagerly loaded — MUST be static imports before any const declarations (ESM rule)
 import './styles/premium.css';
@@ -106,6 +107,12 @@ const MainLayout = ({ children }) => (
 
 // Root App
 function App() {
+    // Keep backend alive — ping /health every 13 min to prevent Render cold starts
+    useEffect(() => {
+        startKeepAlive();
+        return () => stopKeepAlive();
+    }, []);
+
     return (
         // FIX [HIGH-F1]: Top-level ErrorBoundary catches provider-level errors
         <ErrorBoundary>

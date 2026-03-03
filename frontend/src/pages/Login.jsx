@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogIn, Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { warmupServer, pingServer } from '../utils/keepAlive';
 import logoImage from '../assets/logo.png';
 import '../styles/auth.css';
 
@@ -21,9 +22,15 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [statusMsg, setStatusMsg] = useState('');
 
     const { login, loginWithGoogle } = useAuth();
     const navigate = useNavigate();
+
+    // Pre-warm server when login page loads
+    useEffect(() => {
+        pingServer();
+    }, []);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -36,10 +43,22 @@ const Login = () => {
         setError('');
         if (!formData.email || !formData.password) { setError('Please fill in all fields'); return; }
         setLoading(true);
+        setStatusMsg('Signing in...');
+
+        // Show progressive status if server is slow (cold start)
+        const slowTimer = setTimeout(() => setStatusMsg('Waking up server...'), 3000);
+        const verySlowTimer = setTimeout(() => setStatusMsg('Almost there — first request takes longer...'), 8000);
+
         try {
             await login(formData.email, formData.password);
+            clearTimeout(slowTimer);
+            clearTimeout(verySlowTimer);
+            setStatusMsg('Success! Redirecting...');
             navigate('/dashboard');
         } catch (err) {
+            clearTimeout(slowTimer);
+            clearTimeout(verySlowTimer);
+            setStatusMsg('');
             const detail = err.response?.data?.detail || err.message || '';
             if (err.response?.status === 401) setError('Invalid email or password.');
             else if (err.response?.status === 403) setError(detail || 'Please verify your email before logging in.');
@@ -158,7 +177,7 @@ const Login = () => {
 
                     {/* Submit */}
                     <button id="email-signin-btn" type="submit" className="auth-button" disabled={isDisabled}>
-                        {loading ? <><Loader2 size={20} className="spinner" />Signing in...</>
+                        {loading ? <><Loader2 size={20} className="spinner" />{statusMsg || 'Signing in...'}</>
                             : <><LogIn size={20} />Sign In</>}
                     </button>
                 </form>
