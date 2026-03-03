@@ -17,9 +17,9 @@ let intervalId = null;
  */
 export async function pingServer() {
     try {
-        const res = await fetch(`${API_URL}/health`, {
+        const res = await fetch(`${API_URL}/`, {
             method: 'GET',
-            signal: AbortSignal.timeout(10000), // 10s timeout
+            signal: AbortSignal.timeout(15000), // 15s timeout (cold start can be slow)
         });
         return res.ok;
     } catch {
