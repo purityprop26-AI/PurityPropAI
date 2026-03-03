@@ -14,6 +14,8 @@ from app.services.tn_knowledge_base import get_knowledge_context
 from app.services.govt_data_service import get_govt_context
 from app.services.rag_retrieval import rag_retrieve
 from app.services.valuation_engine import compute_valuation, format_valuation_for_llm
+from app.services.input_sanitizer import sanitize_query, validate_price_output
+from app.services.response_simplifier import simplify_valuation_for_user
 from typing import List, Dict
 
 logger = structlog.get_logger(__name__)
@@ -307,24 +309,29 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
         # Get relevant knowledge context (pure dict lookup — fast, no I/O)
         kb_context = get_knowledge_context(user_message.lower())
 
+        # ── INPUT SANITIZATION ────────────────────────────────────────
+        sanitized_msg, sanitize_warnings = sanitize_query(user_message)
+        if sanitize_warnings:
+            logger.info("input_sanitized", warnings=sanitize_warnings)
+
         # ── RAG RETRIEVAL (Database-Backed) ──────────────────────────
-        # Try to extract locality and asset type from user query
-        locality = extract_locality(user_message)
-        asset_type = extract_asset_type_from_query(user_message)
+        locality = extract_locality(sanitized_msg)
+        asset_type = extract_asset_type_from_query(sanitized_msg)
 
         rag_context = ""
+        _valuation_for_simplify = None
         if locality:
             try:
-                rag_result = await rag_retrieve(user_message, locality, asset_type)
+                rag_result = await rag_retrieve(sanitized_msg, locality, asset_type)
                 if rag_result.get("has_data"):
                     valuation = compute_valuation(rag_result)
                     rag_context = format_valuation_for_llm(valuation)
+                    _valuation_for_simplify = valuation
                     logger.info("rag_valuation_computed",
                                 locality=locality, source=rag_result.get("data_source"),
                                 comparable_count=rag_result.get("comparable_count"))
             except Exception as e:
                 logger.warning("rag_retrieval_failed", error=str(e), locality=locality)
-                # Fallback to legacy dict-based context
                 rag_context = ""
 
         # Legacy fallback: if RAG returned nothing, use old dict-based system
@@ -376,6 +383,14 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
                     response.raise_for_status()
                     result = response.json()
                     assistant_message = result["choices"][0]["message"]["content"]
+
+                    # Append simplified summary for retail users
+                    if _valuation_for_simplify:
+                        simplified = simplify_valuation_for_user(_valuation_for_simplify)
+                        assistant_message += "\n\n" + "━" * 40 + "\n"
+                        assistant_message += "📋 Quick Summary (Plain English)\n"
+                        assistant_message += simplified
+
                     return assistant_message, language
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (429, 500, 502, 503) and attempt < 2:
@@ -420,16 +435,23 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
         language = detect_language(user_message)
         kb_context = get_knowledge_context(user_message.lower())
 
+        # ── INPUT SANITIZATION ────────────────────────────────────────
+        sanitized_msg, sanitize_warnings = sanitize_query(user_message)
+        if sanitize_warnings:
+            logger.info("stream_input_sanitized", warnings=sanitize_warnings)
+
         # RAG retrieval (same as generate_response)
-        locality = extract_locality(user_message)
-        asset_type = extract_asset_type_from_query(user_message)
+        locality = extract_locality(sanitized_msg)
+        asset_type = extract_asset_type_from_query(sanitized_msg)
         rag_context = ""
+        _valuation_for_simplify = None
         if locality:
             try:
-                rag_result = await rag_retrieve(user_message, locality, asset_type)
+                rag_result = await rag_retrieve(sanitized_msg, locality, asset_type)
                 if rag_result.get("has_data"):
                     valuation = compute_valuation(rag_result)
                     rag_context = format_valuation_for_llm(valuation)
+                    _valuation_for_simplify = valuation
             except Exception as e:
                 logger.warning("rag_stream_failed", error=str(e))
 
@@ -469,6 +491,13 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
                         continue
                     data = line[6:].strip()
                     if data == "[DONE]":
+                        # Append simplified summary at end of stream
+                        if _valuation_for_simplify:
+                            simplified = simplify_valuation_for_user(_valuation_for_simplify)
+                            footer = "\n\n" + "━" * 40 + "\n"
+                            footer += "📋 Quick Summary (Plain English)\n"
+                            footer += simplified
+                            yield footer, language, False
                         yield "", language, True
                         return
                     try:
