@@ -9,9 +9,11 @@ Uses httpx.AsyncClient for fully non-blocking I/O — no threadpool required.
 import httpx
 import structlog
 from app.config import settings
-from app.services.domain_validator import detect_language
+from app.services.domain_validator import detect_language, extract_locality, extract_asset_type_from_query
 from app.services.tn_knowledge_base import get_knowledge_context
 from app.services.govt_data_service import get_govt_context
+from app.services.rag_retrieval import rag_retrieve
+from app.services.valuation_engine import compute_valuation, format_valuation_for_llm
 from typing import List, Dict
 
 logger = structlog.get_logger(__name__)
@@ -305,8 +307,31 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
         # Get relevant knowledge context (pure dict lookup — fast, no I/O)
         kb_context = get_knowledge_context(user_message.lower())
 
-        # Get government data context (guideline values, stamp duty, portal links)
-        govt_context = get_govt_context(user_message)
+        # ── RAG RETRIEVAL (Database-Backed) ──────────────────────────
+        # Try to extract locality and asset type from user query
+        locality = extract_locality(user_message)
+        asset_type = extract_asset_type_from_query(user_message)
+
+        rag_context = ""
+        if locality:
+            try:
+                rag_result = await rag_retrieve(user_message, locality, asset_type)
+                if rag_result.get("has_data"):
+                    valuation = compute_valuation(rag_result)
+                    rag_context = format_valuation_for_llm(valuation)
+                    logger.info("rag_valuation_computed",
+                                locality=locality, source=rag_result.get("data_source"),
+                                comparable_count=rag_result.get("comparable_count"))
+            except Exception as e:
+                logger.warning("rag_retrieval_failed", error=str(e), locality=locality)
+                # Fallback to legacy dict-based context
+                rag_context = ""
+
+        # Legacy fallback: if RAG returned nothing, use old dict-based system
+        if not rag_context:
+            govt_context = get_govt_context(user_message)
+        else:
+            govt_context = rag_context
 
         # Merge both contexts
         combined_parts = [p for p in [kb_context, govt_context] if p]
@@ -394,7 +419,25 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
 
         language = detect_language(user_message)
         kb_context = get_knowledge_context(user_message.lower())
-        govt_context = get_govt_context(user_message)
+
+        # RAG retrieval (same as generate_response)
+        locality = extract_locality(user_message)
+        asset_type = extract_asset_type_from_query(user_message)
+        rag_context = ""
+        if locality:
+            try:
+                rag_result = await rag_retrieve(user_message, locality, asset_type)
+                if rag_result.get("has_data"):
+                    valuation = compute_valuation(rag_result)
+                    rag_context = format_valuation_for_llm(valuation)
+            except Exception as e:
+                logger.warning("rag_stream_failed", error=str(e))
+
+        if not rag_context:
+            govt_context = get_govt_context(user_message)
+        else:
+            govt_context = rag_context
+
         combined_parts = [p for p in [kb_context, govt_context] if p]
         context = "\n\n".join(combined_parts)
         system_prompt = self._get_system_prompt(language, context)

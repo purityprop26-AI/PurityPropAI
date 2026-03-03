@@ -198,3 +198,38 @@ def detect_language(text: str) -> str:
 
     return "english"
 
+
+def extract_locality(query: str) -> str:
+    """
+    Extract locality name from user query.
+    Returns the database-normalized locality name (e.g., 'anna_nagar').
+    Returns empty string if no locality found.
+    """
+    query_lower = query.lower().strip()
+    try:
+        from app.services.govt_data_service import LOCALITY_KEYWORDS
+        # Sort by length desc to match longer names first ("anna nagar" before "anna")
+        sorted_keywords = sorted(LOCALITY_KEYWORDS.keys(), key=len, reverse=True)
+        for keyword in sorted_keywords:
+            if keyword in query_lower:
+                _district, locality_key = LOCALITY_KEYWORDS[keyword]
+                return locality_key
+    except ImportError:
+        pass
+    return ""
+
+
+def extract_asset_type_from_query(query: str) -> str:
+    """
+    Extract asset type from user query.
+    Returns: 'land', 'apartment', 'villa', or 'commercial'.
+    Defaults to 'land' if not detected.
+    """
+    query_lower = query.lower()
+    if any(w in query_lower for w in ['apartment', 'flat', 'flats', 'apartments', 'bhk']):
+        return 'apartment'
+    if any(w in query_lower for w in ['villa', 'villas', 'independent house', 'bungalow']):
+        return 'villa'
+    if any(w in query_lower for w in ['commercial', 'office', 'shop', 'showroom', 'warehouse']):
+        return 'commercial'
+    return 'land'
