@@ -78,6 +78,18 @@ def simplify_valuation_for_user(valuation: Dict[str, Any]) -> str:
     # Build response
     lines = []
 
+    # Source clarity — distinguish guideline-only from registry-backed
+    is_guideline_only = (
+        source in ('guideline', 'guideline_values')
+        or comps <= 1
+        and conf_score < 0.4
+    )
+    if is_guideline_only and 'registry' not in source:
+        lines.append(
+            f"⚠️ *Note: Limited registry data for {locality}. "
+            f"Prices shown are based on government guideline values.*\n"
+        )
+
     # Main price line
     if p_min and p_max and p_min != p_max:
         lines.append(
@@ -122,26 +134,34 @@ def simplify_valuation_for_user(valuation: Dict[str, Any]) -> str:
     else:
         lines.append("Buying and selling activity is **low** in this area.")
 
-    # Risks — simplified
+    # Risks — simplified and DEDUPLICATED
     risks = valuation.get('risks', [])
     if risks:
+        seen_risks = set()
         simplified_risks = []
         for r in risks:
             r_lower = r.lower()
             if 'variance' in r_lower or 'volatile' in r_lower:
-                simplified_risks.append("Prices vary quite a bit in this area — negotiate carefully.")
+                msg = "Prices vary quite a bit in this area — negotiate carefully."
             elif 'older' in r_lower or 'data age' in r_lower:
-                simplified_risks.append("Our data is a few months old, so current prices may differ slightly.")
+                msg = "Our data is a few months old, so current prices may differ slightly."
             elif 'guideline' in r_lower:
-                simplified_risks.append("This estimate is based on government values, not actual sales.")
-            elif 'single' in r_lower or 'low' in r_lower:
-                simplified_risks.append("Very few sales recorded — get a local broker's opinion too.")
+                msg = "This estimate is based on government values, not actual sales."
+            elif 'single' in r_lower or 'low' in r_lower or 'insufficient' in r_lower:
+                msg = "Very few sales recorded — get a local broker's opinion too."
+            else:
+                continue
+            # Deduplicate
+            if msg not in seen_risks:
+                seen_risks.add(msg)
+                simplified_risks.append(msg)
         if simplified_risks:
             lines.append("\n**Things to keep in mind:**")
             for sr in simplified_risks:
                 lines.append(f"• {sr}")
 
     return "\n".join(lines)
+
 
 
 def format_institutional(valuation: Dict[str, Any]) -> str:
