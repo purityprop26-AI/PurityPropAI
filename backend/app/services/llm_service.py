@@ -464,6 +464,8 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
                         simplified = simplify_valuation_for_user(_valuation_for_simplify)
                         assistant_message += "\n\n" + "━" * 40 + "\n"
                         assistant_message += "📋 Quick Summary (Plain English)\n"
+                        if _locality_fallback["is_fallback"]:
+                            assistant_message += f"⚠️ Note: No direct data for {_locality_fallback['user_typed']}. Showing nearest data from **{_locality_fallback['display_resolved']}**.\n\n"
                         assistant_message += simplified
 
                     return assistant_message, language
