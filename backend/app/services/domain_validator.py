@@ -204,11 +204,17 @@ def extract_locality(query: str) -> str:
     Extract locality name from user query.
     Returns the database-normalized locality name (e.g., 'anna_nagar').
     Returns empty string if no locality found.
+
+    Strategy:
+    1. Try LOCALITY_KEYWORDS dict (80 Chennai localities) — exact match
+    2. Fall back to smart text normalization — converts multi-word place names
+       to DB format (e.g., 'RS Puram' → 'rs_puram', 'Ellis Nagar' → 'ellis_nagar')
     """
     query_lower = query.lower().strip()
+
+    # Strategy 1: LOCALITY_KEYWORDS dict (fast, exact)
     try:
         from app.services.govt_data_service import LOCALITY_KEYWORDS
-        # Sort by length desc to match longer names first ("anna nagar" before "anna")
         sorted_keywords = sorted(LOCALITY_KEYWORDS.keys(), key=len, reverse=True)
         for keyword in sorted_keywords:
             if keyword in query_lower:
@@ -216,6 +222,36 @@ def extract_locality(query: str) -> str:
                 return locality_key
     except ImportError:
         pass
+
+    # Strategy 2: Smart text normalization for PDF-imported localities
+    # Remove common noise words and extract location-like phrases
+    noise_words = {
+        'what', 'is', 'the', 'of', 'in', 'at', 'for', 'and', 'or', 'a', 'an',
+        'land', 'price', 'rate', 'value', 'property', 'apartment', 'flat', 'villa',
+        'cost', 'how', 'much', 'tell', 'me', 'about', 'give', 'show', 'current',
+        'average', 'market', 'commercial', 'residential', 'per', 'sqft', 'ground',
+        'buy', 'sell', 'purchase', 'rent', 'investment', 'query', 'please', 'can',
+        'you', 'i', 'want', 'to', 'know', 'details', 'information', 'info',
+        'chennai', 'coimbatore', 'madurai', 'salem', 'trichy', 'vellore', 'erode',
+        'tiruppur', 'tirunelveli', 'karur', 'kancheepuram', 'puducherry',
+        'tamil', 'nadu', 'tn', 'district', 'area', 'zone', 'near', 'nearby',
+    }
+
+    # Extract potential locality words (everything that's not noise)
+    words = re.sub(r'[^a-z0-9\s]', '', query_lower).split()
+    location_words = [w for w in words if w not in noise_words and len(w) > 1]
+
+    if not location_words:
+        return ""
+
+    # Try multi-word combinations (longest first)
+    # "rs puram" → "rs_puram", "db road" → "db_road"
+    for length in range(min(4, len(location_words)), 0, -1):
+        for i in range(len(location_words) - length + 1):
+            candidate = '_'.join(location_words[i:i+length])
+            if len(candidate) > 2:
+                return candidate
+
     return ""
 
 

@@ -262,18 +262,43 @@ async def get_locality_metadata(
 async def get_valuation_stats(
     locality: str,
     asset_type: str = "land",
-    months: int = 24,
+    months: int = 48,
 ) -> Dict[str, Any]:
     """
     Call server-side compute_valuation_stats() function.
     Returns: comparable_count, min, max, median, q1, q3, std_dev, cov, dates.
     """
     async with get_db_context() as session:
-        result = await session.execute(
-            text("SELECT * FROM compute_valuation_stats(:loc, :asset, :months)"),
-            {"loc": locality, "asset": asset_type, "months": months}
-        )
-        row = result.fetchone()
+        try:
+            result = await session.execute(
+                text("SELECT * FROM compute_valuation_stats(:loc, :asset, :months)"),
+                {"loc": locality, "asset": asset_type, "months": months}
+            )
+            row = result.fetchone()
+        except Exception as e:
+            logger.warning("valuation_stats_function_failed", error=str(e), locality=locality)
+            # Fallback: inline stats query
+            result = await session.execute(
+                text("""
+                    SELECT COUNT(*)::BIGINT, MIN(price_per_sqft), MAX(price_per_sqft),
+                           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_sqft),
+                           PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_sqft),
+                           PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_sqft),
+                           STDDEV(price_per_sqft)::DOUBLE PRECISION,
+                           CASE WHEN AVG(price_per_sqft) > 0
+                                THEN (STDDEV(price_per_sqft) / AVG(price_per_sqft))::DOUBLE PRECISION
+                                ELSE 0::DOUBLE PRECISION END,
+                           MIN(registration_date), MAX(registration_date)
+                    FROM registry_transactions
+                    WHERE locality ILIKE :loc
+                      AND asset_type = :asset
+                      AND registration_date >= (CURRENT_DATE - (:months || ' months')::INTERVAL)
+                      AND is_outlier = FALSE
+                """),
+                {"loc": f"%{locality}%", "asset": asset_type, "months": str(months)}
+            )
+            row = result.fetchone()
+
         if row and row[0] and row[0] > 0:
             return {
                 "comparable_count": int(row[0]),

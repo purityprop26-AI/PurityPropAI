@@ -16,6 +16,10 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Load .env BEFORE importing app modules — embedding_service reads HF_API_TOKEN at import time
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
 from sqlalchemy import text
 from app.core.database import get_db_context
 from app.core.embedding_service import embed_query, vector_to_pg_literal
@@ -52,7 +56,7 @@ async def embed_registry_transactions():
             FROM registry_transactions
             WHERE embedding IS NULL
             ORDER BY created_at DESC
-            LIMIT 500
+            LIMIT 2500
         """))
         rows = result.fetchall()
         total = len(rows)
@@ -73,10 +77,10 @@ async def embed_registry_transactions():
                 await session.execute(
                     text("""
                         UPDATE registry_transactions
-                        SET embedding = :vec::vector
-                        WHERE id = :id
+                        SET embedding = CAST(:vec AS vector)
+                        WHERE id = CAST(:id AS uuid)
                     """),
-                    {"vec": vec_literal, "id": row[0]}
+                    {"vec": vec_literal, "id": str(row[0])}
                 )
                 count += 1
             else:
@@ -118,7 +122,9 @@ async def verify_embeddings():
             LIMIT 3
         """))
         for row in test.fetchall():
-            print(f"  Vector test: {row[0]} ₹{row[1]}/sqft (sim: {row[2]:.4f})")
+            sim_val = row[2] if row[2] is not None else 0.0
+            price_val = row[1] if row[1] is not None else 0
+            print(f"  Vector test: {row[0]} Rs.{price_val}/sqft (sim: {sim_val:.4f})")
 
 
 async def main():
