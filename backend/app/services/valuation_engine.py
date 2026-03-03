@@ -265,6 +265,21 @@ def compute_valuation(rag_result: Dict[str, Any]) -> Dict[str, Any]:
     if statistical:
         result["statistical"] = statistical
 
+    # Alias keys for audit/simplifier compatibility
+    result["pricing"] = {
+        "min_sqft": price_min,
+        "max_sqft": price_max,
+        "median_sqft": price_median,
+        "std_dev": statistical.get("std_dev"),
+        "q1": statistical.get("q1_price"),
+        "q3": statistical.get("q3_price"),
+        "iqr": statistical.get("iqr"),
+        "cov": statistical.get("cov"),
+    }
+    result["price_min"] = price_min
+    result["price_max"] = price_max
+    result["price_median"] = price_median
+
     logger.info(
         "valuation_computed",
         locality=locality,

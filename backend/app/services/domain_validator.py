@@ -57,7 +57,17 @@ NON_REAL_ESTATE_INDICATORS = [
     'poem', 'story', 'joke', 'recipe', 'weather forecast',
     'movie', 'song', 'cricket', 'football', 'programming',
     'python', 'javascript', 'math problem',
-    'kavithai', 'kathai', 'comedy', 'cinema', 'padam'
+    'kavithai', 'kathai', 'comedy', 'cinema', 'padam',
+    # Cooking/food
+    'cook', 'biryani', 'dosa', 'sambar', 'idli', 'chicken', 'mutton',
+    'ingredients', 'bake', 'fry', 'boil', 'roast',
+    # Health
+    'headache', 'fever', 'medicine', 'hospital', 'doctor', 'disease',
+    # Education
+    'exam', 'syllabus', 'college', 'university', 'homework', 'assignment',
+    # General knowledge
+    'capital', 'president', 'prime minister', 'population', 'planet',
+    'translate', 'definition', 'meaning of',
 ]
 
 # Real estate question patterns
