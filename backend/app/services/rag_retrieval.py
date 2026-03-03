@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_context
 from app.core.embedding_service import embed_query
+from app.services.reranker import rerank
 
 logger = structlog.get_logger(__name__)
 
@@ -165,14 +166,14 @@ async def hybrid_search(
                     SELECT  id, district, locality, micro_market, asset_type,
                             area_sqft, sale_value, price_per_sqft,
                             registration_date, zone_tier, data_source,
-                            1 - (embedding <=> :vec::vector) AS similarity
+                            1 - (embedding <=> CAST(:vec AS vector)) AS similarity
                     FROM registry_transactions
                     WHERE locality ILIKE :locality
                       AND asset_type = :asset_type
-                      AND registration_date >= (CURRENT_DATE - (:months || ' months')::INTERVAL)
+                      AND registration_date >= (CURRENT_DATE - CAST(:months || ' months' AS INTERVAL))
                       AND is_outlier = FALSE
                       AND embedding IS NOT NULL
-                    ORDER BY embedding <=> :vec::vector
+                    ORDER BY embedding <=> CAST(:vec AS vector)
                     LIMIT :limit
                 """),
                 {
@@ -192,7 +193,7 @@ async def hybrid_search(
                     FROM registry_transactions
                     WHERE locality ILIKE :locality
                       AND asset_type = :asset_type
-                      AND registration_date >= (CURRENT_DATE - (:months || ' months')::INTERVAL)
+                      AND registration_date >= (CURRENT_DATE - CAST(:months || ' months' AS INTERVAL))
                       AND is_outlier = FALSE
                     ORDER BY registration_date DESC
                     LIMIT :limit
@@ -344,8 +345,21 @@ async def rag_retrieve(
     stats_task = asyncio.create_task(get_valuation_stats(locality, asset_type))
     guideline_task = asyncio.create_task(get_guideline_from_db(locality, asset_type))
     metadata_task = asyncio.create_task(get_locality_metadata(locality))
+    search_task = asyncio.create_task(hybrid_search(user_query, locality, asset_type))
 
-    stats, guideline, metadata = await asyncio.gather(stats_task, guideline_task, metadata_task)
+    stats, guideline, metadata, search_results = await asyncio.gather(
+        stats_task, guideline_task, metadata_task, search_task
+    )
+
+    # ── RERANK search results ────────────────────────────────────────
+    if search_results:
+        median_for_rerank = stats.get('median_price', 0) if stats.get('comparable_count', 0) > 0 else 0
+        iqr_for_rerank = (stats.get('q3_price', 0) - stats.get('q1_price', 0)) if stats.get('comparable_count', 0) > 0 else 0
+        search_results = rerank(
+            search_results, locality,
+            median_price=median_for_rerank,
+            iqr_range=max(iqr_for_rerank, 1),
+        )
 
     has_registry_data = stats.get("comparable_count", 0) > 0
     has_guideline_data = guideline is not None
