@@ -93,7 +93,7 @@ async def get_guideline_from_db(
 async def get_transactions(
     locality: str,
     asset_type: str = "land",
-    months: int = 24,
+    months: int = 60,
     limit: int = 50,
     session: Optional[AsyncSession] = None,
 ) -> List[Dict[str, Any]]:
@@ -147,7 +147,7 @@ async def hybrid_search(
     user_query: str,
     locality: str,
     asset_type: str = "land",
-    months: int = 24,
+    months: int = 60,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """
@@ -263,7 +263,7 @@ async def get_locality_metadata(
 async def get_valuation_stats(
     locality: str,
     asset_type: str = "land",
-    months: int = 48,
+    months: int = 60,
 ) -> Dict[str, Any]:
     """
     Call server-side compute_valuation_stats() function.
