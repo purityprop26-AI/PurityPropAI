@@ -171,10 +171,11 @@ async def seed_locality_metadata():
             infra = INFRA_PREMIUMS.get(locality, {})
             pop_tier = "metro" if district == "chennai" else "urban"
 
+            import json as _json
             await session.execute(
                 text("""
                     INSERT INTO locality_metadata (locality, district, zone_tier, population_tier, features, infra_premium)
-                    VALUES (:locality, :district, :zone, :pop_tier, :features, :infra::jsonb)
+                    VALUES (:locality, :district, :zone, :pop_tier, :features, CAST(:infra AS jsonb))
                     ON CONFLICT (locality, district) DO UPDATE
                     SET zone_tier = EXCLUDED.zone_tier,
                         population_tier = EXCLUDED.population_tier,
@@ -186,7 +187,7 @@ async def seed_locality_metadata():
                     "locality": locality, "district": district,
                     "zone": zone, "pop_tier": pop_tier,
                     "features": features,
-                    "infra": str(infra).replace("'", '"') if infra else "{}",
+                    "infra": _json.dumps(infra) if infra else "{}",
                 }
             )
             count += 1
