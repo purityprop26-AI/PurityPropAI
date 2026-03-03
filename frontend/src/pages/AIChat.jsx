@@ -468,9 +468,6 @@ const AIChat = () => {
                                         <div className="data-freshness-bar">
                                             <span className="freshness-dot" />
                                             <span className="freshness-label">Registry-Backed</span>
-                                            <span>•</span>
-                                            <span>Updated: Jul 2024</span>
-                                            <span>•</span>
                                             <span className="trust-badge registry">Verified</span>
                                         </div>
                                         {parseResponseSections(msg.content).map((section, i) => (
