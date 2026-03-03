@@ -21,6 +21,59 @@ from typing import List, Dict
 logger = structlog.get_logger(__name__)
 
 
+def _detect_locality_fallback(user_message: str, resolved_locality: str) -> dict:
+    """
+    Detect if the resolved locality differs from what the user actually typed.
+    Returns {is_fallback: bool, user_typed: str, resolved: str, display_resolved: str}
+    """
+    if not resolved_locality:
+        return {"is_fallback": False}
+
+    # Normalize the resolved locality for display (fairlands → Fairlands)
+    display_resolved = resolved_locality.replace('_', ' ').title()
+    resolved_plain = resolved_locality.replace('_', '').lower()
+
+    # Extract potential location words the user typed
+    import re as _re
+    noise = {
+        'what', 'is', 'the', 'of', 'in', 'at', 'for', 'and', 'or', 'a', 'an',
+        'land', 'price', 'rate', 'value', 'property', 'apartment', 'flat',
+        'cost', 'how', 'much', 'tell', 'me', 'about', 'give', 'show', 'current',
+        'commercial', 'residential', 'per', 'sqft', 'ground', 'buy', 'sell',
+        'details', 'information', 'info', 'tamil', 'nadu', 'chennai',
+        'coimbatore', 'madurai', 'salem', 'trichy', 'district',
+        'query', 'please', 'can', 'you', 'i', 'want', 'to', 'know',
+    }
+    words = _re.sub(r'[^a-z0-9\s]', '', user_message.lower()).split()
+    location_words = [w for w in words if w not in noise and len(w) > 1]
+
+    if not location_words:
+        return {"is_fallback": False}
+
+    # Check if the user's typed location words match the resolved key
+    user_typed_combined = ''.join(location_words).lower()
+    user_typed_display = ' '.join(location_words).title()
+
+    # If the user's words appear inside the resolved key or vice versa → not a fallback
+    if resolved_plain in user_typed_combined or user_typed_combined in resolved_plain:
+        return {"is_fallback": False}
+
+    # Check individual words — only count as match if word covers ≥60% of resolved key
+    for w in location_words:
+        if w == resolved_plain:
+            return {"is_fallback": False}
+        if len(w) >= len(resolved_plain) * 0.6 and (w in resolved_plain or resolved_plain in w):
+            return {"is_fallback": False}
+
+    # Fallback detected
+    return {
+        "is_fallback": True,
+        "user_typed": user_typed_display,
+        "resolved": resolved_locality,
+        "display_resolved": display_resolved,
+    }
+
+
 class LLMService:
     """Async service for interacting with Llama 3.1 8B via Groq API."""
 
@@ -320,13 +373,35 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
 
         rag_context = ""
         _valuation_for_simplify = None
+        _locality_fallback = {"is_fallback": False}
         if locality:
+            # Detect if user asked about a different locality than what we resolved
+            _locality_fallback = _detect_locality_fallback(user_message, locality)
+            if _locality_fallback["is_fallback"]:
+                logger.info("locality_fallback",
+                            user_typed=_locality_fallback["user_typed"],
+                            resolved=locality)
             try:
                 rag_result = await rag_retrieve(sanitized_msg, locality, asset_type)
                 if rag_result.get("has_data"):
                     valuation = compute_valuation(rag_result)
                     rag_context = format_valuation_for_llm(valuation)
                     _valuation_for_simplify = valuation
+
+                    # Inject fallback disclosure into LLM context
+                    if _locality_fallback["is_fallback"]:
+                        fallback_note = (
+                            f"\n\n⚠️ IMPORTANT LOCALITY NOTE: "
+                            f"The user asked about '{_locality_fallback['user_typed']}', "
+                            f"but no registry data exists for that exact locality. "
+                            f"Data shown is from '{_locality_fallback['display_resolved']}' "
+                            f"(nearest available locality in the same district). "
+                            f"You MUST disclose this clearly in your response: "
+                            f"'No direct data for {_locality_fallback['user_typed']}. "
+                            f"Showing nearest data from {_locality_fallback['display_resolved']}.'"
+                        )
+                        rag_context += fallback_note
+
                     logger.info("rag_valuation_computed",
                                 locality=locality, source=rag_result.get("data_source"),
                                 comparable_count=rag_result.get("comparable_count"))
@@ -445,13 +520,33 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
         asset_type = extract_asset_type_from_query(sanitized_msg)
         rag_context = ""
         _valuation_for_simplify = None
+        _locality_fallback = {"is_fallback": False}
         if locality:
+            _locality_fallback = _detect_locality_fallback(user_message, locality)
+            if _locality_fallback["is_fallback"]:
+                logger.info("stream_locality_fallback",
+                            user_typed=_locality_fallback["user_typed"],
+                            resolved=locality)
             try:
                 rag_result = await rag_retrieve(sanitized_msg, locality, asset_type)
                 if rag_result.get("has_data"):
                     valuation = compute_valuation(rag_result)
                     rag_context = format_valuation_for_llm(valuation)
                     _valuation_for_simplify = valuation
+
+                    # Inject fallback disclosure for LLM
+                    if _locality_fallback["is_fallback"]:
+                        fallback_note = (
+                            f"\n\n\u26a0\ufe0f IMPORTANT LOCALITY NOTE: "
+                            f"The user asked about '{_locality_fallback['user_typed']}', "
+                            f"but no registry data exists for that exact locality. "
+                            f"Data shown is from '{_locality_fallback['display_resolved']}' "
+                            f"(nearest available locality in the same district). "
+                            f"You MUST disclose this clearly in your response: "
+                            f"'No direct data for {_locality_fallback['user_typed']}. "
+                            f"Showing nearest data from {_locality_fallback['display_resolved']}.'"
+                        )
+                        rag_context += fallback_note
             except Exception as e:
                 logger.warning("rag_stream_failed", error=str(e))
 
@@ -494,8 +589,10 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
                         # Append simplified summary at end of stream
                         if _valuation_for_simplify:
                             simplified = simplify_valuation_for_user(_valuation_for_simplify)
-                            footer = "\n\n" + "━" * 40 + "\n"
-                            footer += "📋 Quick Summary (Plain English)\n"
+                            footer = "\n\n" + "\u2501" * 40 + "\n"
+                            footer += "\ud83d\udccb Quick Summary (Plain English)\n"
+                            if _locality_fallback["is_fallback"]:
+                                footer += f"\u26a0\ufe0f Note: No direct data for {_locality_fallback['user_typed']}. Showing nearest data from **{_locality_fallback['display_resolved']}**.\n\n"
                             footer += simplified
                             yield footer, language, False
                         yield "", language, True
