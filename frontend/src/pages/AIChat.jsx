@@ -27,17 +27,34 @@ function parseResponseSections(text) {
     const allEmojis = `${sectionEmojis}|${numberedEmojis}`;
     const emojiRegex = new RegExp(`^(${allEmojis})\\s*(.+)`);
 
+    // ── PRE-PROCESS: inject newlines before emoji section markers ──
+    // This handles streaming responses where chunks concatenate without \n
+    const emojiInjectRegex = new RegExp(`(${allEmojis})`, 'g');
+    let preprocessed = text.replace(emojiInjectRegex, '\n$1');
+
+    // Also inject newlines before common structured headers
+    preprocessed = preprocessed
+        .replace(/REGISTRY-BACKED\s*VALUATION\s*REPORT/gi, '\nREGISTRY-BACKED VALUATION REPORT')
+        .replace(/Verified\s*Source:/gi, '\nVerified Source:');
+
     const sections = [];
-    const lines = text.split('\n');
+    const lines = preprocessed.split('\n');
     let currentSection = null;
 
     for (const line of lines) {
         const trimmed = line.trim();
 
-        // Skip separator lines (━━━, ═══, ───, etc.)
-        if (/^[━═─—]{3,}/.test(trimmed)) {
+        // Skip separator lines (━━━, ═══, ───) and empty
+        if (!trimmed || /^[━═─—]{3,}/.test(trimmed)) {
+            if (currentSection && currentSection.content) {
+                currentSection.content += '\n';
+            }
             continue;
         }
+
+        // Skip standalone header lines (they become the card's overall header)
+        if (/^REGISTRY-BACKED\s*VALUATION\s*REPORT$/i.test(trimmed)) continue;
+        if (/^Verified\s*Source:/i.test(trimmed)) continue;
 
         // Detect section headers by emoji prefix
         const emojiMatch = trimmed.match(emojiRegex);
@@ -63,12 +80,7 @@ function parseResponseSections(text) {
             };
         } else if (currentSection) {
             // Add non-empty lines to current section content
-            if (trimmed) {
-                currentSection.content += (currentSection.content ? '\n' : '') + trimmed;
-            } else if (currentSection.content) {
-                // Preserve paragraph breaks
-                currentSection.content += '\n';
-            }
+            currentSection.content += (currentSection.content ? '\n' : '') + trimmed;
         } else {
             // Content before any section header
             if (trimmed) {
