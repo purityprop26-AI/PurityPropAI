@@ -23,7 +23,7 @@ const Register = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
-    const { loginWithGoogle, loginWithToken } = useAuth();
+    const { register, loginWithGoogle, loginWithToken } = useAuth();
     const navigate = useNavigate();
 
     const calcStrength = (pwd) => {
@@ -67,45 +67,25 @@ const Register = () => {
 
         setLoading(true);
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-            const res = await fetch(`${API_URL}/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: formData.name.trim(),
-                    email: formData.email,
-                    password: formData.password,
-                }),
-            });
-            const data = await res.json();
+            const data = await register(formData.name.trim(), formData.email, formData.password);
 
-            if (!res.ok) {
-                const detail = data.detail || 'Registration failed.';
-                if (res.status === 429) setError('Too many attempts. Please try again later.');
-                else if (detail.includes('already registered') || detail.includes('already exists')) {
-                    setError('This email is already registered. Please login.');
-                } else {
-                    setError(detail);
-                }
-                return;
-            }
-
-            // Success handling
+            // AuthContext's register() handles auto-login + token persistence
             if (data.auto_verified && data.access_token) {
-                // Auto-verified (no SMTP configured) — log in directly
-                await loginWithToken(data.access_token, data.user);
                 navigate('/dashboard');
             } else {
-                // OTP flow — redirect to verification page
                 navigate('/verify-email', {
                     state: { email: formData.email, name: formData.name.trim() },
                 });
             }
-
         } catch (err) {
-            setError(err.message === 'Failed to fetch'
-                ? 'Cannot connect to server. Try again later.'
-                : 'Registration failed. Please try again.');
+            const detail = err.response?.data?.detail || err.message || '';
+            if (detail.includes('Too many')) {
+                setError('Too many attempts. Please try again later.');
+            } else if (detail.includes('already registered') || detail.includes('already exists')) {
+                setError('This email is already registered. Please login.');
+            } else {
+                setError(detail || 'Registration failed. Please try again.');
+            }
         } finally {
             setLoading(false);
         }
@@ -117,6 +97,7 @@ const Register = () => {
         setGoogleLoading(true);
         try {
             await loginWithGoogle();
+            navigate('/dashboard');
         } catch (err) {
             setError(err.message || 'Google sign-up failed. Try again.');
             setGoogleLoading(false);

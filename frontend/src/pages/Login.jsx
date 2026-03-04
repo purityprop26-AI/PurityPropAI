@@ -76,7 +76,7 @@ const Login = () => {
         setGoogleLoading(true);
         try {
             await loginWithGoogle();
-            // Supabase OAuth redirects — no navigate() needed
+            navigate('/dashboard');
         } catch (err) {
             setError(err.message || 'Google sign-in failed. Try again.');
             setGoogleLoading(false);
