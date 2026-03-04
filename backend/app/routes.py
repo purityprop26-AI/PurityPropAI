@@ -13,6 +13,14 @@ from datetime import datetime, timezone
 import uuid
 import json as _json
 
+
+def sanitize_text(text: str) -> str:
+    """Strip Unicode surrogate characters that PostgreSQL/asyncpg rejects."""
+    if not text:
+        return text
+    # Encode with 'surrogatepass' to handle surrogates, then decode ignoring them
+    return text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
+
 from app.database import get_db
 from app.models import ChatSession, ChatMessage
 from app.schemas import (
@@ -243,13 +251,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         rejection_msg = get_rejection_message(language)
 
         user_msg = ChatMessage(
-            session_id=session.id, role="user", content=request.message,
+            session_id=session.id, role="user", content=sanitize_text(request.message),
             language=language, timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(user_msg)
 
         assistant_msg = ChatMessage(
-            session_id=session.id, role="assistant", content=rejection_msg,
+            session_id=session.id, role="assistant", content=sanitize_text(rejection_msg),
             language=language, timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(assistant_msg)
@@ -280,13 +288,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     )
 
     user_msg = ChatMessage(
-        session_id=session.id, role="user", content=request.message,
+        session_id=session.id, role="user", content=sanitize_text(request.message),
         language=detected_language, timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(user_msg)
 
     assistant_msg = ChatMessage(
-        session_id=session.id, role="assistant", content=response_text,
+        session_id=session.id, role="assistant", content=sanitize_text(response_text),
         language=detected_language, timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(assistant_msg)
@@ -333,7 +341,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     ]
 
     user_msg = ChatMessage(
-        session_id=session.id, role="user", content=request.message,
+        session_id=session.id, role="user", content=sanitize_text(request.message),
         language="english", timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(user_msg)
@@ -352,7 +360,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             detected_lang = lang
             if is_done:
                 assistant_msg = ChatMessage(
-                    session_id=session.id, role="assistant", content=full_text,
+                    session_id=session.id, role="assistant", content=sanitize_text(full_text),
                     language=detected_lang, timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
                 db.add(assistant_msg)

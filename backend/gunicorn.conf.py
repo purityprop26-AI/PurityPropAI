@@ -1,15 +1,18 @@
 # Gunicorn configuration file
-import multiprocessing
+import os
 
 # Use uvicorn worker for FastAPI (ASGI) application
-# This is critical for avoiding the 'FastAPI.__call__() missing 1 required positional argument: 'send'' error
 worker_class = "uvicorn.workers.UvicornWorker"
 
 # Gunicorn configuration for production
-bind = "0.0.0.0:10000"  # Render default port
-workers = multiprocessing.cpu_count() * 2 + 1  # Standard worker calculation
-timeout = 120  # Increase timeout for long-running requests
+bind = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
+
+# Use WEB_CONCURRENCY env var if set (Render sets this), otherwise default to 1
+# DO NOT use cpu_count() — Render's free tier can't handle 17 workers
+workers = int(os.environ.get("WEB_CONCURRENCY", 1))
+
+timeout = 120  # Increase timeout for long-running LLM requests
 keepalive = 5  # Keep connections alive
 
 print(f"Using worker class: {worker_class}")
-print(f"Starting {workers} workers")
+print(f"Starting {workers} worker(s) on port {bind}")
