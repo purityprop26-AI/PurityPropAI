@@ -93,11 +93,60 @@ async def embed_registry_transactions():
     print(f"  ✅ Embedded {count}/{total} transactions ({errors} errors)")
 
 
+async def embed_rag_summaries():
+    """Embed RAG locality summaries for vector search."""
+    print("\nEmbedding RAG summaries...")
+    count = 0
+    errors = 0
+
+    try:
+        async with get_db_context() as session:
+            # Get unembedded summaries
+            result = await session.execute(text("""
+                SELECT id, locality_name, city, text_summary
+                FROM locality_rag_summaries
+                WHERE embedding IS NULL
+                ORDER BY locality_name
+            """))
+            rows = result.fetchall()
+            total = len(rows)
+            print(f"  Found {total} summaries to embed")
+
+            for i, row in enumerate(rows):
+                summary_id, loc_name, city, summary_text = row
+
+                # Use first 500 chars for embedding (model has token limit)
+                embed_text = summary_text[:500] if summary_text else f"{loc_name} {city} property"
+                vector = await embed_query(embed_text)
+
+                if vector:
+                    vec_literal = vector_to_pg_literal(vector)
+                    await session.execute(
+                        text("""
+                            UPDATE locality_rag_summaries
+                            SET embedding = CAST(:vec AS vector)
+                            WHERE id = :id
+                        """),
+                        {"vec": vec_literal, "id": summary_id}
+                    )
+                    count += 1
+                else:
+                    errors += 1
+
+                if (i + 1) % 10 == 0:
+                    print(f"  Progress: {i+1}/{total} (embedded: {count}, errors: {errors})")
+                    await asyncio.sleep(0.5)  # Rate limit HF API
+
+        print(f"  ✅ Embedded {count}/{total} RAG summaries ({errors} errors)")
+    except Exception as e:
+        print(f"  ⚠️  RAG summary embedding skipped: {e}")
+        print(f"     Run `python -m migrations.generate_rag_summaries` first")
+
+
 async def embed_guideline_descriptions():
     """Create searchable text representations for guideline values."""
-    print("Creating guideline embeddings (stored as registry_transactions with source='guideline')...")
+    print("Creating guideline embeddings...")
     # Guideline values don't need vector embeddings — they're looked up by exact locality.
-    # But we create text descriptions for potential future RAG use.
     print("  ℹ️ Guideline values use scalar lookup, not vector search. Skipping.")
 
 
@@ -115,7 +164,7 @@ async def verify_embeddings():
         # Test vector search
         test = await session.execute(text("""
             SELECT locality, price_per_sqft,
-                   1 - (embedding <=> (SELECT embedding FROM registry_transactions LIMIT 1)) AS sim
+                   1 - (embedding <=> (SELECT embedding FROM registry_transactions WHERE embedding IS NOT NULL LIMIT 1)) AS sim
             FROM registry_transactions
             WHERE embedding IS NOT NULL
             ORDER BY sim DESC
@@ -126,6 +175,18 @@ async def verify_embeddings():
             price_val = row[1] if row[1] is not None else 0
             print(f"  Vector test: {row[0]} Rs.{price_val}/sqft (sim: {sim_val:.4f})")
 
+        # Check RAG summary embeddings
+        try:
+            rag_total = await session.execute(
+                text("SELECT COUNT(*) FROM locality_rag_summaries")
+            )
+            rag_embedded = await session.execute(
+                text("SELECT COUNT(*) FROM locality_rag_summaries WHERE embedding IS NOT NULL")
+            )
+            print(f"  RAG summaries: {rag_embedded.scalar()}/{rag_total.scalar()} embedded")
+        except Exception:
+            pass
+
 
 async def main():
     print("=" * 60)
@@ -134,6 +195,7 @@ async def main():
 
     await embed_registry_transactions()
     await embed_guideline_descriptions()
+    await embed_rag_summaries()
     await verify_embeddings()
 
     print("\n" + "=" * 60)
