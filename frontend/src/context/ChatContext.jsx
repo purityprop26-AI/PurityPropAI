@@ -1,145 +1,182 @@
 /**
- * ChatContext — Global Chat State Management
+ * ChatContext — Per-User Database-Backed Chat Management
  *
- * Fixes applied:
- *   [HIGH-F3]  localStorage now capped at MAX_CHATS (50) with LRU eviction.
- *              Previously stored ALL chats forever → QuotaExceededError risk.
- *   [MED-F5]   Messages now use stable msg.id as key (set on creation).
- *              Previously used array index → incorrect DOM recycling on insert.
+ * Sessions are stored in the database, linked to authenticated users via owner_id.
+ * Each user sees only their own chats. Chats persist across devices.
+ *
+ * API endpoints used:
+ *   GET    /api/sessions              — list user's sessions
+ *   POST   /api/sessions              — create new session
+ *   PATCH  /api/sessions/{id}         — rename session
+ *   DELETE /api/sessions/{id}         — delete session
+ *   DELETE /api/sessions              — clear all sessions
+ *   GET    /api/sessions/{id}/messages — load messages for a session
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth } from './AuthContext';
+import axios from 'axios';
 
 const ChatContext = createContext(null);
 
-// FIX [HIGH-F3]: Hard caps prevent localStorage from growing unbounded.
-const MAX_CHATS = 50;   // Max chat sessions kept in history
-const MAX_MSG_COUNT = 100;  // Max messages kept per chat session
+const API_URL = (import.meta.env.VITE_API_URL || '').trim();
 
-const STORAGE_KEY = 'chatHistory';
+// Axios instance that auto-attaches auth token
+function useApi() {
+    const { token } = useAuth();
+    const instance = useRef(
+        axios.create({ baseURL: API_URL, timeout: 15000 })
+    );
 
-/** Load chat history from localStorage, gracefully handling corruption. */
-function loadChatHistory() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-
-        // Deduplicate chats by id — keep last occurrence (most recent wins)
-        // Also migrate old timestamp-based ids to UUIDs for stable React keys
-        const seen = new Map();
-        for (const chat of parsed) {
-            // Migrate timestamp-based chat ids → UUID
-            const isTimestampId = /^\d+$/.test(String(chat.id));
-            const stableId = isTimestampId ? crypto.randomUUID() : (chat.id || crypto.randomUUID());
-
-            // Ensure every message has a unique id (old messages have no id)
-            const migratedMessages = Array.isArray(chat.messages)
-                ? chat.messages.map((msg, idx) => ({
-                    ...msg,
-                    id: msg.id || `${stableId}-msg-${idx}-${crypto.randomUUID()}`,
-                }))
-                : [];
-
-            seen.set(stableId, { ...chat, id: stableId, messages: migratedMessages });
-        }
-        return Array.from(seen.values());
-    } catch {
-        // Corrupted storage — start fresh
-        localStorage.removeItem(STORAGE_KEY);
-        return [];
-    }
-}
-
-
-
-/**
- * Persist chat history to localStorage with size guard.
- * FIX [HIGH-F3]: Caps array at MAX_CHATS (LRU: drops oldest).
- *               Caps messages per chat at MAX_MSG_COUNT.
- *               Catches QuotaExceededError and silently drops oldest chat.
- */
-function saveChatHistory(chats) {
-    try {
-        // Cap total sessions (keep most recent MAX_CHATS)
-        const capped = chats.slice(-MAX_CHATS).map(chat => ({
-            ...chat,
-            // Cap messages per session to prevent per-chat bloat
-            messages: Array.isArray(chat.messages)
-                ? chat.messages.slice(-MAX_MSG_COUNT)
-                : [],
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(capped));
-    } catch (err) {
-        // QuotaExceededError — storage full; evict oldest half and retry once
-        if (err.name === 'QuotaExceededError' || err.code === 22) {
-            try {
-                const reduced = chats.slice(Math.ceil(chats.length / 2));
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(reduced));
-            } catch {
-                // If still failing, clear storage entirely to unblock the app
-                localStorage.removeItem(STORAGE_KEY);
+    useEffect(() => {
+        const id = instance.current.interceptors.request.use((config) => {
+            if (token) {
+                config.headers.Authorization = `Bearer ${token}`;
             }
-        }
-    }
+            return config;
+        });
+        return () => instance.current.interceptors.request.eject(id);
+    }, [token]);
+
+    return instance.current;
 }
 
 export function ChatProvider({ children }) {
-    const [chats, setChats] = useState(loadChatHistory);
-    const [currentChatId, setCurrentChatId] = useState(() => {
-        // Restore last active chat on mount
-        try {
-            const saved = localStorage.getItem('currentChatId');
-            return saved || null;
-        } catch { return null; }
-    });
+    const { user, token, loading: authLoading } = useAuth();
+    const api = useApi();
+
+    const [chats, setChats] = useState([]);       // [{session_id, title, created_at, updated_at, message_count}]
+    const [currentChatId, setCurrentChatId] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [loadingChats, setLoadingChats] = useState(true);
 
-    // FIX [HIGH-F3]: Persist on change, but with cap enforcement
+    const fetchedRef = useRef(false);
+
+    // ── Load sessions from backend when user logs in ──────────────────
     useEffect(() => {
-        if (chats.length > 0) {
-            saveChatHistory(chats);
+        if (authLoading) return;  // wait for auth to settle
+
+        if (user && token && !fetchedRef.current) {
+            fetchedRef.current = true;
+            loadSessionsFromBackend();
         }
-    }, [chats]);
 
-    // Sync messages when changing chat
-    useEffect(() => {
-        if (currentChatId) {
-            const chat = chats.find(c => c.id === currentChatId);
-            if (chat) {
-                setMessages(chat?.messages || []);
-                // Persist active chat ID
-                try { localStorage.setItem('currentChatId', currentChatId); } catch { }
-            } else {
-                // Chat was deleted or doesn't exist — reset
-                setCurrentChatId(null);
-                setMessages([]);
-                try { localStorage.removeItem('currentChatId'); } catch { }
-            }
-        } else {
+        if (!user) {
+            // Logged out — clear everything
+            fetchedRef.current = false;
+            setChats([]);
+            setCurrentChatId(null);
             setMessages([]);
-            try { localStorage.removeItem('currentChatId'); } catch { }
+            setLoadingChats(false);
         }
+    }, [user, token, authLoading]);
+
+    const loadSessionsFromBackend = async () => {
+        setLoadingChats(true);
+        try {
+            const res = await api.get('/api/sessions');
+            const sessions = (res.data.sessions || []).map(s => ({
+                id: s.session_id,
+                title: s.title || 'New Chat',
+                createdAt: s.created_at,
+                updatedAt: s.updated_at,
+                messageCount: s.message_count || 0,
+                messages: null,  // lazy-loaded on select
+            }));
+            setChats(sessions);
+
+            // Restore last active chat if still exists
+            const lastChatId = localStorage.getItem('currentChatId');
+            if (lastChatId && sessions.find(s => s.id === lastChatId)) {
+                setCurrentChatId(lastChatId);
+            }
+        } catch (err) {
+            console.error('Failed to load sessions:', err?.response?.data || err.message);
+        } finally {
+            setLoadingChats(false);
+        }
+    };
+
+    // ── Load messages when switching chats ────────────────────────────
+    useEffect(() => {
+        if (!currentChatId) {
+            setMessages([]);
+            localStorage.removeItem('currentChatId');
+            return;
+        }
+
+        localStorage.setItem('currentChatId', currentChatId);
+
+        // Check if messages are already cached in the chat object
+        const chat = chats.find(c => c.id === currentChatId);
+        if (chat?.messages) {
+            setMessages(chat.messages);
+            return;
+        }
+
+        // Fetch from backend
+        loadMessagesFromBackend(currentChatId);
     }, [currentChatId]);
 
-    const createNewChat = useCallback(() => {
-        const id = crypto.randomUUID();
-        const newChat = {
-            id,
-            title: 'New Chat',
-            messages: [],
-            createdAt: new Date().toISOString(),
-        };
-        setChats(prev => [...prev, newChat]);
-        setCurrentChatId(id);
-        setMessages([]);
-        return id;
-    }, []);
+    const loadMessagesFromBackend = async (chatId) => {
+        try {
+            const res = await api.get(`/api/sessions/${chatId}/messages`);
+            const msgs = (res.data.messages || []).map((m, idx) => ({
+                id: `${chatId}-msg-${idx}`,
+                role: m.role,
+                content: m.content,
+                language: m.language,
+                timestamp: m.timestamp,
+            }));
+            setMessages(msgs);
 
+            // Cache in the chat object
+            setChats(prev => prev.map(c =>
+                c.id === chatId ? { ...c, messages: msgs } : c
+            ));
+        } catch (err) {
+            console.error('Failed to load messages:', err?.response?.data || err.message);
+            setMessages([]);
+        }
+    };
+
+    // ── Create new chat (calls backend) ──────────────────────────────
+    const createNewChat = useCallback(async () => {
+        try {
+            const res = await api.post('/api/sessions', { title: 'New Chat' });
+            const newChat = {
+                id: res.data.session_id,
+                title: res.data.title || 'New Chat',
+                createdAt: res.data.created_at,
+                updatedAt: res.data.created_at,
+                messageCount: 0,
+                messages: [],
+            };
+            setChats(prev => [newChat, ...prev]);
+            setCurrentChatId(newChat.id);
+            setMessages([]);
+            return newChat.id;
+        } catch (err) {
+            console.error('Failed to create session:', err?.response?.data || err.message);
+            // Fallback: create local-only session
+            const fallbackId = crypto.randomUUID();
+            const fallback = {
+                id: fallbackId,
+                title: 'New Chat',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                messageCount: 0,
+                messages: [],
+            };
+            setChats(prev => [fallback, ...prev]);
+            setCurrentChatId(fallbackId);
+            setMessages([]);
+            return fallbackId;
+        }
+    }, [api]);
+
+    // ── Add message (local state + backend saves it via /chat) ───────
     const addMessage = useCallback((chatId, message) => {
-        // FIX [MED-F5]: Ensure every message has a stable unique id.
-        // API responses get a uuid; welcome messages already have one set on creation.
         const msgWithId = {
             ...message,
             id: message.id || crypto.randomUUID(),
@@ -151,17 +188,16 @@ export function ChatProvider({ children }) {
             if (chat.id !== chatId) return chat;
 
             const updatedMessages = [...(chat.messages || []), msgWithId];
-            // Auto-title from first user message
             const title = chat.title === 'New Chat' && message.role === 'user'
-                ? message.content.slice(0, 40)
+                ? message.content.slice(0, 60)
                 : chat.title;
 
             return { ...chat, messages: updatedMessages, title };
         }));
     }, []);
 
+    // ── Update message (for streaming) ───────────────────────────────
     const updateMessage = useCallback((chatId, messageId, updates) => {
-        // Update a specific message by id (used for streaming updates)
         setMessages(prev => prev.map(msg =>
             msg.id === messageId ? { ...msg, ...updates } : msg
         ));
@@ -175,50 +211,63 @@ export function ChatProvider({ children }) {
         }));
     }, []);
 
-    const deleteChat = useCallback((chatId) => {
+    // ── Delete chat (calls backend) ──────────────────────────────────
+    const deleteChat = useCallback(async (chatId) => {
         setChats(prev => prev.filter(c => c.id !== chatId));
         if (currentChatId === chatId) {
             setCurrentChatId(null);
             setMessages([]);
         }
-    }, [currentChatId]);
 
-    const renameChat = useCallback((chatId, newTitle) => {
+        try {
+            await api.delete(`/api/sessions/${chatId}`);
+        } catch (err) {
+            console.error('Failed to delete session:', err?.response?.data || err.message);
+        }
+    }, [currentChatId, api]);
+
+    // ── Rename chat (calls backend) ──────────────────────────────────
+    const renameChat = useCallback(async (chatId, newTitle) => {
+        const trimmed = newTitle.slice(0, 120);
         setChats(prev => prev.map(c =>
-            c.id === chatId ? { ...c, title: newTitle.slice(0, 60) } : c
+            c.id === chatId ? { ...c, title: trimmed } : c
         ));
-    }, []);
 
-    const clearAllChats = useCallback(() => {
+        try {
+            await api.patch(`/api/sessions/${chatId}`, { title: trimmed });
+        } catch (err) {
+            console.error('Failed to rename session:', err?.response?.data || err.message);
+        }
+    }, [api]);
+
+    // ── Clear all chats (calls backend) ──────────────────────────────
+    const clearAllChats = useCallback(async () => {
         setChats([]);
         setCurrentChatId(null);
         setMessages([]);
-        localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem('currentChatId');
-    }, []);
 
-    /**
-     * loadChat — switch to an existing chat session.
-     * Sets currentChatId AND immediately syncs the message list.
-     * This is what Sidebar calls when a user clicks a recent chat.
-     */
+        try {
+            await api.delete('/api/sessions');
+        } catch (err) {
+            console.error('Failed to clear sessions:', err?.response?.data || err.message);
+        }
+    }, [api]);
+
+    // ── Load existing chat ───────────────────────────────────────────
     const loadChat = useCallback((chatId) => {
         setCurrentChatId(chatId);
-        setChats(prev => {
-            const chat = prev.find(c => c.id === chatId);
-            setMessages(chat?.messages || []);
-            return prev; // no structural change, just side-effect sync
-        });
     }, []);
 
     const value = {
         chats,
         currentChatId,
         messages,
+        loadingChats,
         createNewChat,
-        loadChat,        // FIX: was missing — Sidebar.jsx needs this to switch chats
+        loadChat,
         addMessage,
-        updateMessage,   // NEW: for streaming message updates
+        updateMessage,
         deleteChat,
         renameChat,
         clearAllChats,

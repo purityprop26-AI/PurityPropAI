@@ -3,7 +3,9 @@ Database Models for Tamil Nadu Real Estate AI Assistant (PostgreSQL/SQLAlchemy)
 """
 
 from datetime import datetime
+import uuid as _uuid
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -31,7 +33,9 @@ class ChatSession(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(255), unique=True, nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # legacy
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=True, index=True)
+    title = Column(String(120), nullable=False, default="New Chat")
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

@@ -23,16 +23,40 @@ class ChatResponse(BaseModel):
 
 class SessionCreate(BaseModel):
     """Request model for creating a new session."""
-    pass
+    title: Optional[str] = "New Chat"
 
 
 class SessionResponse(BaseModel):
     """Response model for session creation."""
     session_id: str
+    title: str = "New Chat"
     created_at: datetime
     
     class Config:
         from_attributes = True
+
+
+class SessionListItem(BaseModel):
+    """Single session in the list."""
+    session_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class SessionListResponse(BaseModel):
+    """Response model for listing user sessions."""
+    sessions: List[SessionListItem]
+    total: int
+
+
+class SessionRenameRequest(BaseModel):
+    """Request model for renaming a session."""
+    title: str = Field(..., min_length=1, max_length=120)
 
 
 class MessageHistory(BaseModel):
@@ -64,4 +88,5 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 

@@ -334,16 +334,15 @@ const AnalysisLoader = () => {
 /* ───────── Main AIChat Component ───────── */
 const AIChat = () => {
     const { messages, currentChatId, addMessage, updateMessage, createNewChat } = useChat();
-    const [sessionId, setSessionId] = useState(null);
+    const { token } = useAuth();
     const [loading, setLoading] = useState(false);
-    const [sessionError, setSessionError] = useState(false);
     const [copiedIndex, setCopiedIndex] = useState(null);
 
     const messagesEndRef = useRef(null);
     const location = useLocation();
-    const sessionCreating = useRef(false);
     const chatInitialized = useRef(false);
 
+    // Create a chat if none exists
     useEffect(() => {
         if (!currentChatId && !chatInitialized.current) {
             chatInitialized.current = true;
@@ -351,33 +350,26 @@ const AIChat = () => {
         }
     }, [currentChatId]);
 
-    // Reset session when chat changes (but don't clear the guard flag — let the next effect handle it)
+    // Show welcome message for empty chats
     useEffect(() => {
-        setSessionId(null);
-    }, [currentChatId]);
-
-    // Create session — runs when chatId exists but sessionId is null
-    useEffect(() => {
-        if (currentChatId && !sessionId && !sessionCreating.current) {
-            sessionCreating.current = true;
-            const controller = new AbortController();
-            createNewSession(1, controller.signal);
-            return () => {
-                controller.abort();
-                sessionCreating.current = false;
-            };
+        if (currentChatId && messages.length === 0) {
+            addMessage(currentChatId, {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: '📍 PurityProp Intelligence Engine — Ready\n\nReal estate valuation, registration data, stamp duty computation, and market intelligence for Tamil Nadu.\n\n🔍 Query any location for instant valuation.\n📊 Get structured pricing with confidence scores.\n🧠 Powered by official TN government data sources.'
+            });
         }
-    }, [currentChatId, sessionId]);
+    }, [currentChatId]);
 
     const initialMessageSent = useRef(false);
 
     useEffect(() => {
-        if (location.state?.initialMessage && sessionId && !initialMessageSent.current) {
+        if (location.state?.initialMessage && currentChatId && !initialMessageSent.current) {
             initialMessageSent.current = true;
             sendMessage(location.state.initialMessage);
             window.history.replaceState({}, document.title);
         }
-    }, [location.state, sessionId]);
+    }, [location.state, currentChatId]);
 
     useEffect(() => {
         scrollToBottom();
@@ -387,35 +379,8 @@ const AIChat = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const createNewSession = async (attempt = 1, signal) => {
-        setSessionError(false);
-        try {
-            const response = await api.post(`/api/sessions`, {}, { signal });
-            if (signal?.aborted) return; // Don't update state if aborted
-            setSessionId(response.data.session_id);
-            sessionCreating.current = false;
-
-            if (messages.length === 0) {
-                addMessage(currentChatId, {
-                    id: crypto.randomUUID(),
-                    role: 'assistant',
-                    content: '📍 PurityProp Intelligence Engine — Ready\n\nReal estate valuation, registration data, stamp duty computation, and market intelligence for Tamil Nadu.\n\n🔍 Query any location for instant valuation.\n📊 Get structured pricing with confidence scores.\n🧠 Powered by official TN government data sources.'
-                });
-            }
-        } catch (err) {
-            if (signal?.aborted) return; // Silently drop aborted requests
-            console.error(`Session error (attempt ${attempt}/3):`, err?.response?.data || err.message);
-            if (attempt < 3) {
-                setTimeout(() => createNewSession(attempt + 1, signal), 2000 * attempt);
-            } else {
-                sessionCreating.current = false;
-                setSessionError(true);
-            }
-        }
-    };
-
     const sendMessage = async (messageText) => {
-        if (!sessionId || !currentChatId) return;
+        if (!currentChatId) return;
 
         const userMessage = {
             id: crypto.randomUUID(),
@@ -437,11 +402,14 @@ const AIChat = () => {
 
         try {
             const baseUrl = API_URL || '';
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${baseUrl}/api/chat/stream`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
-                    session_id: sessionId,
+                    session_id: currentChatId,
                     message: messageText
                 })
             });
