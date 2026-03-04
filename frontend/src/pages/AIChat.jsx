@@ -163,6 +163,21 @@ const ConfidenceMeter = ({ text }) => {
     );
 };
 
+/* ───────── Inline Markdown → HTML (for card text) ───────── */
+function renderMarkdown(text) {
+    if (!text) return '';
+    return text
+        // Bold: **text** or __text__
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.+?)__/g, '<strong>$1</strong>')
+        // Italic: *text* (but not inside bold)
+        .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+        // Bullet points: • at start of line
+        .replace(/^[•·]\s*/gm, '  •  ')
+        // Line breaks
+        .replace(/\n/g, '<br/>');
+}
+
 /* ───────── Intelligence Card Component ───────── */
 const IntelligenceCard = ({ section, index }) => {
     const [visible, setVisible] = useState(false);
@@ -185,6 +200,8 @@ const IntelligenceCard = ({ section, index }) => {
         risk: 'card-risk',
     };
 
+    const renderedContent = renderMarkdown(section.content);
+
     return (
         <div
             className={`intel-card ${typeClasses[section.type] || ''} ${visible ? 'visible' : ''}`}
@@ -200,10 +217,10 @@ const IntelligenceCard = ({ section, index }) => {
                 {section.type === 'confidence' ? (
                     <>
                         <ConfidenceMeter text={section.content} />
-                        <div className="intel-card-text">{section.content}</div>
+                        <div className="intel-card-text" dangerouslySetInnerHTML={{ __html: renderedContent }} />
                     </>
                 ) : (
-                    <div className="intel-card-text">{section.content}</div>
+                    <div className="intel-card-text" dangerouslySetInnerHTML={{ __html: renderedContent }} />
                 )}
             </div>
         </div>
