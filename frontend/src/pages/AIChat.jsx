@@ -466,7 +466,7 @@ const AIChat = () => {
             // Fallback to non-streaming endpoint
             try {
                 const response = await api.post(`/api/chat`, {
-                    session_id: sessionId,
+                    session_id: currentChatId,
                     message: messageText
                 });
                 updateMessage(currentChatId, assistantId, {
@@ -494,20 +494,7 @@ const AIChat = () => {
     /* ───────── Render ───────── */
     return (
         <div className="chat-container">
-            {sessionError && (
-                <div className="session-error-banner">
-                    <span>⚠️ Engine initialization failed. Server may be waking up.</span>
-                    <button
-                        onClick={() => {
-                            sessionCreating.current = true;
-                            createNewSession();
-                        }}
-                        className="retry-btn"
-                    >
-                        Retry Connection
-                    </button>
-                </div>
-            )}
+
 
             <div className="chat-messages">
                 {messages.map((msg, idx) => (
@@ -580,7 +567,7 @@ const AIChat = () => {
             <div className="chat-input-area">
                 <PremiumInput
                     onSend={sendMessage}
-                    disabled={loading || !sessionId}
+                    disabled={loading || !currentChatId}
                     placeholder="Enter location for valuation — e.g. 'Porur land price'"
                 />
             </div>
