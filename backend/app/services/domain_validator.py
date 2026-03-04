@@ -245,6 +245,13 @@ def extract_locality(query: str) -> str:
         'chennai', 'coimbatore', 'madurai', 'salem', 'trichy', 'vellore', 'erode',
         'tiruppur', 'tirunelveli', 'karur', 'kancheepuram', 'puducherry',
         'tamil', 'nadu', 'tn', 'district', 'area', 'zone', 'near', 'nearby',
+        # Query verbs and adjectives that are NOT locality names
+        'estimate', 'estimated', 'approximate', 'approximately', 'roughly',
+        'check', 'find', 'get', 'calculate', 'predict', 'forecast', 'expected',
+        'latest', 'today', 'now', 'recent', 'guide', 'guideline',
+        'suggest', 'compare', 'best', 'good', 'fair', 'cheap', 'expensive',
+        'high', 'low', 'new', 'old', 'should', 'would', 'could', 'will',
+        'whats', 'hows', 'range', 'trend', 'analysis', 'report', 'real', 'estate',
     }
 
     # Extract potential locality words (everything that's not noise)

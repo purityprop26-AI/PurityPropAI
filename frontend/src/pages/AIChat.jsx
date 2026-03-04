@@ -20,20 +20,27 @@ const ANALYSIS_PHASES = [
 function parseResponseSections(text) {
     if (!text) return [];
 
-    // Pattern: emoji followed by section title — then content
-    const sectionPattern = /^(📍|💰|📊|🔍|📈|📉|🧠|🚀|⚠️|✅|🏗️|📋|🔗)\s*(.+?)(?:\s*[—–-]\s*|\n)/gm;
-    const sections = [];
-    let lastIndex = 0;
-    let match;
+    // Emoji sets that mark section headers
+    const sectionEmojis = '📍|💰|📊|🔍|📈|📉|🧠|🚀|⚠️|✅|🏗️|📋|🔗';
+    // Numbered emojis used in registry reports (1️⃣ through 🔟)
+    const numberedEmojis = '1️⃣|2️⃣|3️⃣|4️⃣|5️⃣|6️⃣|7️⃣|8️⃣|9️⃣|🔟|🔒';
+    const allEmojis = `${sectionEmojis}|${numberedEmojis}`;
+    const emojiRegex = new RegExp(`^(${allEmojis})\\s*(.+)`);
 
-    // Split text by lines starting with known emoji headers
+    const sections = [];
     const lines = text.split('\n');
     let currentSection = null;
 
     for (const line of lines) {
         const trimmed = line.trim();
+
+        // Skip separator lines (━━━, ═══, ───, etc.)
+        if (/^[━═─—]{3,}/.test(trimmed)) {
+            continue;
+        }
+
         // Detect section headers by emoji prefix
-        const emojiMatch = trimmed.match(/^(📍|💰|📊|🔍|📈|📉|🧠|🚀|⚠️|✅|🏗️|📋|🔗)\s*(.+)/);
+        const emojiMatch = trimmed.match(emojiRegex);
 
         if (emojiMatch) {
             if (currentSection) {
@@ -55,7 +62,13 @@ function parseResponseSections(text) {
                 type: categorizeSection(emoji),
             };
         } else if (currentSection) {
-            currentSection.content += (currentSection.content ? '\n' : '') + trimmed;
+            // Add non-empty lines to current section content
+            if (trimmed) {
+                currentSection.content += (currentSection.content ? '\n' : '') + trimmed;
+            } else if (currentSection.content) {
+                // Preserve paragraph breaks
+                currentSection.content += '\n';
+            }
         } else {
             // Content before any section header
             if (trimmed) {
@@ -89,6 +102,18 @@ function categorizeSection(emoji) {
         '✅': 'info',
         '📋': 'info',
         '🔗': 'info',
+        // Numbered emojis used in registry reports
+        '🔒': 'info',
+        '1️⃣': 'location',
+        '2️⃣': 'valuation',
+        '3️⃣': 'benchmark',
+        '4️⃣': 'confidence',
+        '5️⃣': 'valuation',
+        '6️⃣': 'info',
+        '7️⃣': 'info',
+        '8️⃣': 'info',
+        '9️⃣': 'info',
+        '🔟': 'info',
     };
     return map[emoji] || 'text';
 }
