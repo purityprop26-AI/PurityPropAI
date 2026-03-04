@@ -20,6 +20,29 @@ from typing import List, Dict
 
 logger = structlog.get_logger(__name__)
 
+import re
+
+# ── LLM OUTPUT SANITIZER ─────────────────────────────────────
+# Strips model template tokens that leak into Llama/Groq responses
+_LLM_TOKEN_PATTERN = re.compile(
+    r'<\|(?:start_header_id|end_header_id|eot_id|begin_of_text|'
+    r'end_of_text|im_start|im_end|pad|unk|sep|cls|mask)\|>'
+    r'|<\|(?:system|user|assistant)\|>',
+    re.IGNORECASE
+)
+
+def _sanitize_llm_output(text: str) -> str:
+    """Remove model template tokens and control artifacts from LLM output."""
+    if not text:
+        return text
+    # Strip Llama/Groq template tokens
+    cleaned = _LLM_TOKEN_PATTERN.sub('', text)
+    # Remove role labels that sometimes leak (e.g. "assistant\n")
+    cleaned = re.sub(r'^\s*(assistant|system|user)\s*\n', '', cleaned, flags=re.IGNORECASE)
+    # Collapse excessive blank lines created by removals
+    cleaned = re.sub(r'\n{4,}', '\n\n\n', cleaned)
+    return cleaned.strip()
+
 
 def _detect_locality_fallback(user_message: str, resolved_locality: str) -> dict:
     """
@@ -457,7 +480,9 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
                     )
                     response.raise_for_status()
                     result = response.json()
-                    assistant_message = result["choices"][0]["message"]["content"]
+                    assistant_message = _sanitize_llm_output(
+                        result["choices"][0]["message"]["content"]
+                    )
 
                     # Append simplified summary for retail users
                     if _valuation_for_simplify:
@@ -604,7 +629,9 @@ NOTE: No specific locality data was found. Use structured estimation model. Labe
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
                         content = delta.get("content", "")
                         if content:
-                            yield content, language, False
+                            content = _sanitize_llm_output(content)
+                            if content:
+                                yield content, language, False
                     except _json.JSONDecodeError:
                         continue
 
