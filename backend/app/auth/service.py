@@ -74,7 +74,9 @@ async def register(request: RegisterRequest, client_ip: str, db: AsyncSession) -
     6. If SMTP NOT configured: auto-verify, return access token
     """
     import os
-    smtp_configured = bool(os.getenv("SMTP_USER", ""))
+    # TEMPORARY: OTP disabled — all new users auto-verified
+    # To re-enable OTP, change this back to: smtp_configured = bool(os.getenv("SMTP_USER", ""))
+    smtp_configured = False
 
     # Rate limit
     allowed, retry_after = check_register_rate(client_ip)
@@ -300,8 +302,10 @@ async def login(request: LoginRequest, client_ip: str, db: AsyncSession) -> Auth
     if user.provider == "google":
         raise ValueError("This account uses Google Sign-In. Please use the Google button.")
 
-    if not user.is_verified:
-        raise PermissionError("Please verify your email before logging in.")
+    # TEMPORARY: OTP disabled — allow unverified users to login
+    # To re-enable, uncomment the check below:
+    # if not user.is_verified:
+    #     raise PermissionError("Please verify your email before logging in.")
 
     # Success — reset login rate limiter for this IP
     reset_login_rate(client_ip)
