@@ -179,8 +179,22 @@ const ConfidenceMeter = ({ text }) => {
 function renderMarkdown(text) {
     if (!text) return '';
 
+    // ── PRE-PROCESS: inject newlines before structural markers ──
+    // Streaming chunks often arrive concatenated without \n
+    let processed = text
+        // Newline before bullet markers (• or · not at start)
+        .replace(/([^\n])([•·])/g, '$1\n$2')
+        // Newline before table rows (| at start of a row pattern)
+        .replace(/([^\n|])\|(?=[A-Za-z0-9₹])/g, '$1\n|')
+        // Newline before markdown table separator rows
+        .replace(/([^\n])\|---/g, '$1\n|---')
+        // Ensure space after :** in bold labels (e.g., **Name:**Value → **Name:** Value)
+        .replace(/\*\*([^*]+?):\*\*(?=\S)/g, '**$1:** ')
+        // Ensure space after : in bullet items without bold
+        .replace(/:(?=[A-Z₹])/g, ': ');
+
     // Split into lines to detect tables
-    const lines = text.split('\n');
+    const lines = processed.split('\n');
     const htmlLines = [];
     let inTable = false;
     let tableRows = [];
@@ -192,8 +206,8 @@ function renderMarkdown(text) {
             .replace(/__(.+?)__/g, '<strong>$1</strong>')
             // Italic: *text* (but not inside bold)
             .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
-            // Bullet points: • at start of line
-            .replace(/^[•·]\s*/gm, '&nbsp;&nbsp;•&nbsp;&nbsp;');
+            // Bullet points: • at start of line → indented bullet
+            .replace(/^[•·]\s*/gm, '<span class="bullet-item">•&nbsp;</span>');
     };
 
     for (let i = 0; i < lines.length; i++) {
@@ -214,24 +228,16 @@ function renderMarkdown(text) {
         } else {
             // End table if we were in one
             if (inTable) {
-                let tableHtml = '<table class="report-table"><thead><tr>';
-                if (tableRows.length > 0) {
-                    tableRows[0].forEach(h => { tableHtml += `<th>${h}</th>`; });
-                    tableHtml += '</tr></thead><tbody>';
-                    for (let r = 1; r < tableRows.length; r++) {
-                        tableHtml += '<tr>';
-                        tableRows[r].forEach(c => { tableHtml += `<td>${c}</td>`; });
-                        tableHtml += '</tr>';
-                    }
-                }
-                tableHtml += '</tbody></table>';
-                htmlLines.push(tableHtml);
+                htmlLines.push(buildTable(tableRows));
                 inTable = false;
                 tableRows = [];
             }
 
             if (line === '') {
-                htmlLines.push('<br/>');
+                // Skip multiple blanks
+                if (htmlLines.length > 0 && htmlLines[htmlLines.length - 1] !== '<br/>') {
+                    htmlLines.push('<br/>');
+                }
             } else {
                 htmlLines.push(processInline(line));
             }
@@ -240,19 +246,24 @@ function renderMarkdown(text) {
 
     // Close any pending table
     if (inTable && tableRows.length > 0) {
-        let tableHtml = '<table class="report-table"><thead><tr>';
-        tableRows[0].forEach(h => { tableHtml += `<th>${h}</th>`; });
-        tableHtml += '</tr></thead><tbody>';
-        for (let r = 1; r < tableRows.length; r++) {
-            tableHtml += '<tr>';
-            tableRows[r].forEach(c => { tableHtml += `<td>${c}</td>`; });
-            tableHtml += '</tr>';
-        }
-        tableHtml += '</tbody></table>';
-        htmlLines.push(tableHtml);
+        htmlLines.push(buildTable(tableRows));
     }
 
     return htmlLines.join('<br/>');
+}
+
+function buildTable(tableRows) {
+    if (!tableRows.length) return '';
+    let html = '<table class="report-table"><thead><tr>';
+    tableRows[0].forEach(h => { html += `<th>${h}</th>`; });
+    html += '</tr></thead><tbody>';
+    for (let r = 1; r < tableRows.length; r++) {
+        html += '<tr>';
+        tableRows[r].forEach(c => { html += `<td>${c}</td>`; });
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
 }
 
 /* ───────── Intelligence Card Component ───────── */
