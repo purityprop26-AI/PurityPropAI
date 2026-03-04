@@ -61,6 +61,12 @@ async def test_rag_queries():
     print("=" * 60)
 
     test_queries = [
+        # Chennai queries (new ETL pipeline)
+        "What is the land price in Thoraipakkam Chennai?",
+        "OMR Chennai property rate",
+        "Adyar Chennai apartment price",
+        "Velachery Chennai land value",
+        # Existing district queries
         "What is the land price in RS Puram Coimbatore?",
         "Fairlands Salem property rate",
         "Ellis Nagar Madurai apartment price",
