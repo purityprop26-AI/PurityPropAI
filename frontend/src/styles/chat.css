@@ -330,6 +330,47 @@
     word-wrap: break-word;
 }
 
+/* ── Report Tables (Comparable Transactions / Cost Estimates) ── */
+.intel-card-text .report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+    font-size: 0.88rem;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.intel-card-text .report-table th {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93C5FD;
+    font-weight: 600;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.intel-card-text .report-table td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    color: #CBD5E1;
+}
+
+.intel-card-text .report-table tbody tr:nth-child(even) {
+    background: rgba(148, 163, 184, 0.04);
+}
+
+.intel-card-text .report-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.intel-card-text strong {
+    color: #F1F5F9;
+    font-weight: 600;
+}
+
 /* ───────── Confidence Meter — Animated bar + score ───────── */
 .confidence-meter {
     display: flex;

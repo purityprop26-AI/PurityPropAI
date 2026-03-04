@@ -166,16 +166,81 @@ const ConfidenceMeter = ({ text }) => {
 /* ───────── Inline Markdown → HTML (for card text) ───────── */
 function renderMarkdown(text) {
     if (!text) return '';
-    return text
-        // Bold: **text** or __text__
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__(.+?)__/g, '<strong>$1</strong>')
-        // Italic: *text* (but not inside bold)
-        .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
-        // Bullet points: • at start of line
-        .replace(/^[•·]\s*/gm, '  •  ')
-        // Line breaks
-        .replace(/\n/g, '<br/>');
+
+    // Split into lines to detect tables
+    const lines = text.split('\n');
+    const htmlLines = [];
+    let inTable = false;
+    let tableRows = [];
+
+    const processInline = (line) => {
+        return line
+            // Bold: **text** or __text__
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/__(.+?)__/g, '<strong>$1</strong>')
+            // Italic: *text* (but not inside bold)
+            .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+            // Bullet points: • at start of line
+            .replace(/^[•·]\s*/gm, '&nbsp;&nbsp;•&nbsp;&nbsp;');
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // Detect table rows (start and end with |)
+        if (line.startsWith('|') && line.endsWith('|')) {
+            // Skip separator rows (|---|---|)
+            if (/^\|[\s\-:]+\|/.test(line) && !line.replace(/[\s|\-:]/g, '')) {
+                continue;
+            }
+            if (!inTable) {
+                inTable = true;
+                tableRows = [];
+            }
+            const cells = line.split('|').filter(c => c.trim() !== '');
+            tableRows.push(cells.map(c => processInline(c.trim())));
+        } else {
+            // End table if we were in one
+            if (inTable) {
+                let tableHtml = '<table class="report-table"><thead><tr>';
+                if (tableRows.length > 0) {
+                    tableRows[0].forEach(h => { tableHtml += `<th>${h}</th>`; });
+                    tableHtml += '</tr></thead><tbody>';
+                    for (let r = 1; r < tableRows.length; r++) {
+                        tableHtml += '<tr>';
+                        tableRows[r].forEach(c => { tableHtml += `<td>${c}</td>`; });
+                        tableHtml += '</tr>';
+                    }
+                }
+                tableHtml += '</tbody></table>';
+                htmlLines.push(tableHtml);
+                inTable = false;
+                tableRows = [];
+            }
+
+            if (line === '') {
+                htmlLines.push('<br/>');
+            } else {
+                htmlLines.push(processInline(line));
+            }
+        }
+    }
+
+    // Close any pending table
+    if (inTable && tableRows.length > 0) {
+        let tableHtml = '<table class="report-table"><thead><tr>';
+        tableRows[0].forEach(h => { tableHtml += `<th>${h}</th>`; });
+        tableHtml += '</tr></thead><tbody>';
+        for (let r = 1; r < tableRows.length; r++) {
+            tableHtml += '<tr>';
+            tableRows[r].forEach(c => { tableHtml += `<td>${c}</td>`; });
+            tableHtml += '</tr>';
+        }
+        tableHtml += '</tbody></table>';
+        htmlLines.push(tableHtml);
+    }
+
+    return htmlLines.join('<br/>');
 }
 
 /* ───────── Intelligence Card Component ───────── */
