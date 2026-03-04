@@ -185,18 +185,89 @@ CHENNAI_REGION_MAP = {
 async def create_schema():
     """Execute DDL to create new tables."""
     print("Creating schema...")
-    async with get_db_context() as session:
-        # Execute each statement separately
-        for stmt in SCHEMA_SQL.split(';'):
-            stmt = stmt.strip()
-            if stmt and not stmt.startswith('--'):
-                try:
-                    await session.execute(text(stmt))
-                except Exception as e:
-                    # Skip if already exists
-                    if 'already exists' not in str(e).lower():
-                        print(f"  Warning: {e}")
-    print("  ✅ Schema created")
+
+    # Split into logical groups — tables first, then indexes
+    table_ddl = [
+        """CREATE TABLE IF NOT EXISTS cities (
+            city_id     SERIAL PRIMARY KEY,
+            city_name   VARCHAR(100) NOT NULL UNIQUE,
+            state       VARCHAR(100) NOT NULL DEFAULT 'Tamil Nadu',
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS regions (
+            region_id   SERIAL PRIMARY KEY,
+            city_id     INTEGER NOT NULL REFERENCES cities(city_id) ON DELETE CASCADE,
+            region_name VARCHAR(150) NOT NULL,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (city_id, region_name)
+        )""",
+        """CREATE TABLE IF NOT EXISTS localities (
+            locality_id   SERIAL PRIMARY KEY,
+            region_id     INTEGER NOT NULL REFERENCES regions(region_id) ON DELETE CASCADE,
+            locality_name VARCHAR(200) NOT NULL,
+            zone_tier     VARCHAR(5),
+            created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (region_id, locality_name)
+        )""",
+        """CREATE TABLE IF NOT EXISTS property_price_trends (
+            id                SERIAL PRIMARY KEY,
+            locality_id       INTEGER NOT NULL REFERENCES localities(locality_id) ON DELETE CASCADE,
+            year              INTEGER NOT NULL CHECK (year BETWEEN 2020 AND 2035),
+            land_price_min    NUMERIC(12,2),
+            land_price_max    NUMERIC(12,2),
+            land_price_avg    NUMERIC(12,2),
+            apartment_price   NUMERIC(12,2),
+            market_price      NUMERIC(12,2),
+            guideline_price   NUMERIC(12,2),
+            ground_value      NUMERIC(14,2),
+            negotiation_min   NUMERIC(5,2),
+            negotiation_max   NUMERIC(5,2),
+            data_type         VARCHAR(20) NOT NULL DEFAULT 'observed'
+                              CHECK (data_type IN ('observed', 'forecast')),
+            created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (locality_id, year, data_type)
+        )""",
+        """CREATE TABLE IF NOT EXISTS locality_rag_summaries (
+            id              SERIAL PRIMARY KEY,
+            locality_name   VARCHAR(200) NOT NULL,
+            region          VARCHAR(150),
+            city            VARCHAR(100),
+            text_summary    TEXT NOT NULL,
+            embedding       vector(384),
+            metadata        JSONB DEFAULT '{}',
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (locality_name, city)
+        )""",
+    ]
+
+    index_ddl = [
+        "CREATE INDEX IF NOT EXISTS idx_ppt_locality_year ON property_price_trends(locality_id, year)",
+        "CREATE INDEX IF NOT EXISTS idx_ppt_data_type ON property_price_trends(data_type)",
+        "CREATE INDEX IF NOT EXISTS idx_localities_name ON localities(locality_name)",
+        "CREATE INDEX IF NOT EXISTS idx_regions_city ON regions(city_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rag_summaries_locality ON locality_rag_summaries(locality_name)",
+    ]
+
+    # Create tables (each in its own context to commit)
+    for ddl in table_ddl:
+        try:
+            async with get_db_context() as session:
+                await session.execute(text(ddl))
+        except Exception as e:
+            if 'already exists' not in str(e).lower():
+                print(f"  Table warning: {str(e)[:120]}")
+
+    # Create indexes
+    for ddl in index_ddl:
+        try:
+            async with get_db_context() as session:
+                await session.execute(text(ddl))
+        except Exception as e:
+            if 'already exists' not in str(e).lower():
+                print(f"  Index warning: {str(e)[:120]}")
+
+    print("  [OK] Schema created")
 
 
 async def seed_cities_and_regions():
@@ -237,7 +308,7 @@ async def seed_cities_and_regions():
                 except Exception as e:
                     print(f"  Region insert warning: {e}")
 
-    print("  ✅ Cities and regions seeded")
+    print("  [OK] Cities and regions seeded")
 
 
 async def verify_schema():
@@ -254,7 +325,7 @@ async def verify_schema():
 
 async def main():
     print("=" * 60)
-    print("PURITYPROP — CHENNAI ETL SCHEMA MIGRATION")
+    print("PURITYPROP -- CHENNAI ETL SCHEMA MIGRATION")
     print("=" * 60)
 
     await create_schema()
@@ -268,3 +339,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

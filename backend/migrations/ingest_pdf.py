@@ -340,22 +340,32 @@ def extract_all_price_data(pdf_path: str) -> List[Dict[str, Any]]:
 
 def _extract_locality_from_text(text: str) -> Optional[str]:
     """Extract locality name from page text."""
-    # Pattern: "LOCALITY NAME Property Price Analysis (2021–2031)"
-    # Or: "LOCALITY NAME – Property Price Analysis"
+    # Pattern 1: "LOCALITY NAME Property Price Analysis (2021-2031)"
+    # Or: "LOCALITY NAME - Property Price Analysis"
     match = re.search(
-        r'^(.+?)\s*(?:–\s*)?Property Price Analysis',
+        r'^(.+?)\s*(?:[–-]\s*)?Property Price Analysis',
         text, re.MULTILINE | re.IGNORECASE
     )
     if match:
         name = match.group(1).strip()
-        # Clean up numbered prefix like "1. D.B. Road" → "D.B. Road"
-        name = re.sub(r'^\d+\.\s*', '', name)
+        # Clean up numbered prefix like "1. D.B. Road"
+        name = re.sub(r'^\d+\.?\s*', '', name)
+        return normalize_locality_name(name)
+
+    # Pattern 2: Chennai format - "1.Thoraipakkam Real Estate Market Intelligence (2021-2031)"
+    match2 = re.search(
+        r'^(?:\d+\.?\s*)?(.+?)\s*Real Estate Market Intelligence',
+        text, re.MULTILINE | re.IGNORECASE
+    )
+    if match2:
+        name = match2.group(1).strip()
+        name = re.sub(r'^\d+\.?\s*', '', name)
         return normalize_locality_name(name)
 
     # Fallback: "LOCALITY_NAME\nTier: ..."
-    match2 = re.search(r'^([A-Z][A-Za-z\s.]+)\n.*Tier:', text, re.MULTILINE)
-    if match2:
-        return normalize_locality_name(match2.group(1))
+    match3 = re.search(r'^([A-Z][A-Za-z\s.]+)\n.*Tier:', text, re.MULTILINE)
+    if match3:
+        return normalize_locality_name(match3.group(1))
 
     return None
 
@@ -411,39 +421,46 @@ async def insert_guideline_values(records: List[Dict[str, Any]]) -> int:
 # ─────────────────────────────────────────────────────────────────────
 
 async def insert_transactions(records: List[Dict[str, Any]]) -> int:
-    """Insert transaction records into registry_transactions."""
+    """Insert transaction records into registry_transactions (batched)."""
     inserted = 0
+    batch_size = 100
 
-    async with get_db_context() as session:
-        for r in records:
-            try:
-                if float(r['sale_value']) <= 0:
-                    continue
+    for batch_start in range(0, len(records), batch_size):
+        batch = records[batch_start:batch_start + batch_size]
+        async with get_db_context() as session:
+            for r in batch:
+                try:
+                    if float(r['sale_value']) <= 0:
+                        continue
 
-                await session.execute(
-                    text("""
-                        INSERT INTO registry_transactions
-                            (district, locality, asset_type, area_sqft, sale_value,
-                             registration_date, zone_tier, guideline_value, data_source)
-                        VALUES
-                            (:district, :locality, :asset_type, :area_sqft, :sale_value,
-                             :registration_date, :zone_tier, :guideline_value, :data_source)
-                    """),
-                    {
-                        'district': r['district'],
-                        'locality': r['locality'],
-                        'asset_type': r['asset_type'],
-                        'area_sqft': r['area_sqft'],
-                        'sale_value': r['sale_value'],
-                        'registration_date': date_type.fromisoformat(r['registration_date']),
-                        'zone_tier': r.get('zone_tier'),
-                        'guideline_value': r.get('guideline_value'),
-                        'data_source': r['data_source'],
-                    }
-                )
-                inserted += 1
-            except Exception as e:
-                pass  # Skip duplicates or errors silently
+                    await session.execute(
+                        text("""
+                            INSERT INTO registry_transactions
+                                (district, locality, asset_type, area_sqft, sale_value,
+                                 registration_date, zone_tier, guideline_value, data_source)
+                            VALUES
+                                (:district, :locality, :asset_type, :area_sqft, :sale_value,
+                                 :registration_date, :zone_tier, :guideline_value, :data_source)
+                        """),
+                        {
+                            'district': r['district'],
+                            'locality': r['locality'],
+                            'asset_type': r['asset_type'],
+                            'area_sqft': r['area_sqft'],
+                            'sale_value': r['sale_value'],
+                            'registration_date': date_type.fromisoformat(r['registration_date']),
+                            'zone_tier': r.get('zone_tier'),
+                            'guideline_value': r.get('guideline_value'),
+                            'data_source': r['data_source'],
+                        }
+                    )
+                    inserted += 1
+                except Exception as e:
+                    pass  # Skip duplicates or errors silently
+        # Progress
+        done = min(batch_start + batch_size, len(records))
+        if done % 500 == 0 or done == len(records):
+            print(f"  Progress: {done}/{len(records)} processed ({inserted} inserted)")
 
     return inserted
 
